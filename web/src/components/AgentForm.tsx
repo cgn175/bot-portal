@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api, CreateAgentRequest } from '../api/client'
 
 interface AgentFormProps {
   onSuccess: () => void
@@ -6,11 +7,12 @@ interface AgentFormProps {
 }
 
 export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CreateAgentRequest>({
     id: '',
     name: '',
     image: '',
-    endpoint: ''
+    endpoint: '',
+    description: ''
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,19 +23,7 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/agents', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || 'Failed to create agent')
-      }
-
+      await api.createAgent(formData)
       onSuccess()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create agent')
@@ -43,9 +33,11 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
   }
 
   return (
-    <div className="agent-form-overlay">
-      <div className="agent-form">
-        <h3>Register New Agent</h3>
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>
+          Register New Agent
+        </h3>
         
         {error && <div className="error-message">{error}</div>}
         
@@ -75,6 +67,17 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
           </div>
 
           <div className="form-group">
+            <label htmlFor="description">Description</label>
+            <textarea
+              id="description"
+              rows={3}
+              value={formData.description}
+              onChange={e => setFormData({ ...formData, description: e.target.value })}
+              placeholder="What does this agent do?"
+            />
+          </div>
+
+          <div className="form-group">
             <label htmlFor="image">Docker Image *</label>
             <input
               id="image"
@@ -99,10 +102,10 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
           </div>
 
           <div className="form-actions">
-            <button type="button" onClick={onCancel} disabled={loading}>
+            <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
               Cancel
             </button>
-            <button type="submit" disabled={loading}>
+            <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? 'Creating...' : 'Create Agent'}
             </button>
           </div>

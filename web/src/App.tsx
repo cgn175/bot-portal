@@ -1,17 +1,33 @@
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import AgentDetail from './pages/AgentDetail'
 import MessageViewer from './pages/MessageViewer'
 import ChannelView from './pages/ChannelView'
 
 function App() {
+  const location = useLocation()
+
   return (
     <div className="app">
       <nav className="navbar">
-        <h1>Bot Portal</h1>
+        <h1>🤖 Bot Portal</h1>
         <div className="nav-links">
-          <Link to="/">Dashboard</Link>
-          <Link to="/messages">Messages</Link>
+          <Link 
+            to="/" 
+            style={{ 
+              color: location.pathname === '/' ? 'var(--color-primary)' : undefined 
+            }}
+          >
+            Agents
+          </Link>
+          <Link 
+            to="/messages"
+            style={{ 
+              color: location.pathname === '/messages' ? 'var(--color-primary)' : undefined 
+            }}
+          >
+            Messages
+          </Link>
         </div>
       </nav>
       

@@ -1,58 +1,199 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
-
-interface Agent {
-  id: string
-  name: string
-  description: string
-  status: string
-  endpoint: string
-  image: string
-}
+import { useParams, useNavigate } from 'react-router-dom'
+import { api, Agent } from '../api/client'
 
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [agent, setAgent] = useState<Agent | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    if (id) {
-      fetch(`/api/agents/${id}`)
-        .then(res => res.json())
-        .then(data => {
-          setAgent(data)
-          setLoading(false)
-        })
-        .catch(() => setLoading(false))
-    }
-  }, [id])
-
-  const handleAction = async (action: string) => {
+  const loadAgent = async () => {
     if (!id) return
-    await fetch(`/api/agents/${id}?action=${action}`, { method: 'POST' })
-    // Refresh agent data
-    if (id) {
-      const res = await fetch(`/api/agents/${id}`)
-      const data = await res.json()
+    try {
+      setLoading(true)
+      const data = await api.getAgent(id)
       setAgent(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load agent')
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (loading) return <div>Loading...</div>
-  if (!agent) return <div>Agent not found</div>
+  useEffect(() => {
+    loadAgent()
+    const interval = setInterval(loadAgent, 3000)
+    return () => clearInterval(interval)
+  }, [id])
+
+  const handleAction = async (action: 'start' | 'stop' | 'restart') => {
+    if (!id) return
+    try {
+      setError('')
+      setSuccess('')
+      if (action === 'start') await api.startAgent(id)
+      else if (action === 'stop') await api.stopAgent(id)
+      else await api.restartAgent(id)
+      setSuccess(`Agent ${action}ed successfully`)
+      setTimeout(loadAgent, 1000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} agent`)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!id || !confirm(`Delete agent ${id}? This cannot be undone.`)) return
+    try {
+      await api.deleteAgent(id)
+      navigate('/')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete agent')
+    }
+  }
+
+  const copyToken = () => {
+    if (agent?.bearer_token) {
+      navigator.clipboard.writeText(agent.bearer_token)
+      setSuccess('Bearer token copied to clipboard')
+      setTimeout(() => setSuccess(''), 3000)
+    }
+  }
+
+  if (loading && !agent) {
+    return <div className="loading">Loading agent...</div>
+  }
+
+  if (!agent) {
+    return (
+      <div className="card">
+        <h2>Agent not found</h2>
+        <button className="btn btn-primary" onClick={() => navigate('/')}>
+          Back to Dashboard
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div className="agent-detail">
-      <h2>{agent.name}</h2>
-      <p className="description">{agent.description}</p>
-      <p className={`status ${agent.status}`}>Status: {agent.status}</p>
-      <p className="endpoint">Endpoint: {agent.endpoint}</p>
-      <p className="image">Image: {agent.image}</p>
+    <div>
+      <button className="btn btn-secondary" onClick={() => navigate('/')} style={{ marginBottom: '1.5rem' }}>
+        ← Back to Dashboard
+      </button>
 
-      <div className="actions">
-        <button onClick={() => handleAction('start')}>Start</button>
-        <button onClick={() => handleAction('stop')}>Stop</button>
-        <button onClick={() => handleAction('restart')}>Restart</button>
+      {error && <div className="error-message">{error}</div>}
+      {success && <div className="success-message">{success}</div>}
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1.5rem' }}>
+          <div>
+            <h2 style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '0.5rem' }}>
+              {agent.name}
+            </h2>
+            <span className={`badge ${agent.status}`}>{agent.status}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {agent.status === 'stopped' && (
+              <button className="btn btn-primary" onClick={() => handleAction('start')}>
+                Start
+              </button>
+            )}
+            {agent.status === 'running' && (
+              <>
+                <button className="btn btn-secondary" onClick={() => handleAction('restart')}>
+                  Restart
+                </button>
+                <button className="btn btn-secondary" onClick={() => handleAction('stop')}>
+                  Stop
+                </button>
+              </>
+            )}
+            <button className="btn btn-danger" onClick={handleDelete}>
+              Delete
+            </button>
+          </div>
+        </div>
+
+        {agent.description && (
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1.5rem' }}>
+            {agent.description}
+          </p>
+        )}
+
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+              Agent ID
+            </label>
+            <code style={{ display: 'block', padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
+              {agent.id}
+            </code>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+              Endpoint
+            </label>
+            <code style={{ display: 'block', padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
+              {agent.endpoint}
+            </code>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+              Docker Image
+            </label>
+            <code style={{ display: 'block', padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
+              {agent.image}
+            </code>
+          </div>
+
+          {agent.bearer_token && (
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+                Bearer Token
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <code style={{ flex: 1, padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {agent.bearer_token}
+                </code>
+                <button className="btn btn-secondary" onClick={copyToken}>
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+
+          {agent.created_at && (
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+                Created
+              </label>
+              <div style={{ color: 'var(--color-text-muted)' }}>
+                {new Date(agent.created_at).toLocaleString()}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>
+          Quick Actions
+        </h3>
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}>
+            View Messages
+          </button>
+          <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}>
+            View Channels
+          </button>
+          <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}>
+            Test Connection
+          </button>
+        </div>
       </div>
     </div>
   )

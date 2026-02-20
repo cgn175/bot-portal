@@ -1,32 +1,31 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { api, Agent } from '../api/client'
 import AgentForm from '../components/AgentForm'
-
-interface Agent {
-  id: string
-  name: string
-  status: string
-  endpoint: string
-}
 
 export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
 
-  const loadAgents = () => {
-    setLoading(true)
-    fetch('/api/agents')
-      .then(res => res.json())
-      .then(data => {
-        setAgents(data)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+  const loadAgents = async () => {
+    try {
+      setLoading(true)
+      setError('')
+      const data = await api.listAgents()
+      setAgents(data || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load agents')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
     loadAgents()
+    const interval = setInterval(loadAgents, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleAgentCreated = () => {
@@ -34,33 +33,108 @@ export default function Dashboard() {
     loadAgents()
   }
 
-  if (loading) {
-    return <div>Loading...</div>
+  const handleDelete = async (id: string) => {
+    if (!confirm(`Delete agent ${id}?`)) return
+    try {
+      await api.deleteAgent(id)
+      loadAgents()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete agent')
+    }
+  }
+
+  const handleAction = async (id: string, action: 'start' | 'stop' | 'restart') => {
+    try {
+      setError('')
+      if (action === 'start') await api.startAgent(id)
+      else if (action === 'stop') await api.stopAgent(id)
+      else await api.restartAgent(id)
+      setTimeout(loadAgents, 1000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} agent`)
+    }
+  }
+
+  if (loading && agents.length === 0) {
+    return <div className="loading">Loading agents...</div>
   }
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-header">
-        <h2>Agents</h2>
-        <button className="btn-primary" onClick={() => setShowForm(true)}>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '2rem', fontWeight: '700' }}>Agents</h2>
+        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
           + Register Agent
         </button>
       </div>
 
-      <div className="agent-grid">
-        {!agents || agents.length === 0 ? (
-          <p>No agents registered yet.</p>
-        ) : (
-          agents.map(agent => (
-            <div key={agent.id} className="agent-card">
-              <h3>{agent.name}</h3>
-              <p className={`status ${agent.status}`}>{agent.status}</p>
-              <p className="endpoint">{agent.endpoint}</p>
-              <Link to={`/agents/${agent.id}`}>View Details</Link>
+      {error && <div className="error-message">{error}</div>}
+
+      {agents.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
+            No agents registered yet
+          </p>
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            Register Your First Agent
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          {agents.map(agent => (
+            <div key={agent.id} className="card">
+              <div style={{ marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  {agent.name}
+                </h3>
+                <span className={`badge ${agent.status}`}>{agent.status}</span>
+              </div>
+              
+              {agent.description && (
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                  {agent.description}
+                </p>
+              )}
+              
+              <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
+                <div style={{ marginBottom: '0.25rem' }}>
+                  <strong>ID:</strong> <code>{agent.id}</code>
+                </div>
+                <div style={{ marginBottom: '0.25rem' }}>
+                  <strong>Endpoint:</strong> <code>{agent.endpoint}</code>
+                </div>
+                <div>
+                  <strong>Image:</strong> <code>{agent.image}</code>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <Link to={`/agents/${agent.id}`} className="btn btn-secondary" style={{ textDecoration: 'none', flex: 1 }}>
+                  Details
+                </Link>
+                {agent.status === 'stopped' && (
+                  <button className="btn btn-primary" onClick={() => handleAction(agent.id, 'start')}>
+                    Start
+                  </button>
+                )}
+                {agent.status === 'running' && (
+                  <>
+                    <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'restart')}>
+                      Restart
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'stop')}>
+                      Stop
+                    </button>
+                  </>
+                )}
+                <button className="btn btn-danger" onClick={() => handleDelete(agent.id)}>
+                  Delete
+                </button>
+              </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {showForm && (
         <AgentForm
