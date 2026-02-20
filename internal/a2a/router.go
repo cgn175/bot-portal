@@ -247,10 +247,9 @@ func (r *Router) sendTaskToAgent(agent *AgentInfo, taskID string, req CreateTask
 	body, _ := json.Marshal(req)
 	log.Printf("Sending task to %s: %s", agent.ID, body)
 
-	httpReq, _ := http.NewRequest("POST", url, nil)
+	httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 	httpReq.Header.Set("Authorization", "Bearer "+agent.BearerToken)
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Body = nil // Would need to set body properly
 
 	resp, err := r.client.Do(httpReq)
 	if err != nil {
