@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -70,10 +71,14 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 	}
 
 	if len(agentCardJSON) > 0 {
-		json.Unmarshal(agentCardJSON, &agent.AgentCard)
+		if err := json.Unmarshal(agentCardJSON, &agent.AgentCard); err != nil {
+			log.Printf("Failed to unmarshal agent_card for %s: %v", agent.ID, err)
+		}
 	}
 	if len(configJSON) > 0 {
-		json.Unmarshal(configJSON, &agent.Config)
+		if err := json.Unmarshal(configJSON, &agent.Config); err != nil {
+			log.Printf("Failed to unmarshal config for %s: %v", agent.ID, err)
+		}
 	}
 
 	return &agent, nil
@@ -103,10 +108,14 @@ func (s *AgentStore) List() ([]*Agent, error) {
 		}
 
 		if len(agentCardJSON) > 0 {
-			json.Unmarshal(agentCardJSON, &agent.AgentCard)
+			if err := json.Unmarshal(agentCardJSON, &agent.AgentCard); err != nil {
+				log.Printf("Failed to unmarshal agent_card for %s: %v", agent.ID, err)
+			}
 		}
 		if len(configJSON) > 0 {
-			json.Unmarshal(configJSON, &agent.Config)
+			if err := json.Unmarshal(configJSON, &agent.Config); err != nil {
+				log.Printf("Failed to unmarshal config for %s: %v", agent.ID, err)
+			}
 		}
 
 		agents = append(agents, &agent)

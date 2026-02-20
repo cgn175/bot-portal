@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
@@ -171,7 +172,9 @@ func (s *MessageStore) AppendMessage(id string, message a2a.TaskMessage) error {
 	// Unmarshal existing messages
 	var messages []a2a.TaskMessage
 	if len(log.Messages) > 0 {
-		json.Unmarshal(log.Messages, &messages)
+		if err := json.Unmarshal(log.Messages, &messages); err != nil {
+			return fmt.Errorf("failed to unmarshal messages: %w", err)
+		}
 	}
 
 	// Append the new message

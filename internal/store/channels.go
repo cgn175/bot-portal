@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/models"
@@ -47,7 +48,9 @@ func (s *ChannelStore) GetByID(id string) (*models.Channel, error) {
 	}
 
 	if len(membersJSON) > 0 {
-		json.Unmarshal(membersJSON, &channel.Members)
+		if err := json.Unmarshal(membersJSON, &channel.Members); err != nil {
+			log.Printf("Failed to unmarshal members for channel %s: %v", channel.ID, err)
+		}
 	}
 
 	return &channel, nil
@@ -74,7 +77,9 @@ func (s *ChannelStore) List() ([]*models.Channel, error) {
 		}
 
 		if len(membersJSON) > 0 {
-			json.Unmarshal(membersJSON, &channel.Members)
+			if err := json.Unmarshal(membersJSON, &channel.Members); err != nil {
+				log.Printf("Failed to unmarshal members for channel %s: %v", channel.ID, err)
+			}
 		}
 
 		channels = append(channels, &channel)
