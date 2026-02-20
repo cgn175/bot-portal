@@ -1,7 +1,9 @@
 package store
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -142,7 +144,11 @@ func (s *AgentStore) UpdateStatus(id, status string) error {
 
 // GenerateBearerToken generates a new bearer token for an agent
 func (s *AgentStore) GenerateBearerToken(id string) (string, error) {
-	token := fmt.Sprintf("agent_%s_%d", id, time.Now().Unix())
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
 	_, err := s.db.Exec("UPDATE agents SET bearer_token = ?, updated_at = ? WHERE id = ?", token, time.Now(), id)
 	return token, err
 }
