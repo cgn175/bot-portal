@@ -51,6 +51,12 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	// Ensure general channel exists
 	channelStore.EnsureGeneralChannel()
 
+	// Ensure Docker network exists
+	ctx := context.Background()
+	if err := dockerMgr.EnsureNetwork(ctx); err != nil {
+		log.Printf("Warning: Failed to ensure Docker network: %v", err)
+	}
+
 	return router
 }
 
@@ -330,8 +336,13 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 }
 
 func (r *Router) deleteAgent(w http.ResponseWriter, req *http.Request, agentID string) {
-	// Stop container first (without writing HTTP response)
-	r.doStopAgent(agentID)
+	agent, err := r.agentStore.GetByID(agentID)
+	if err == nil && agent != nil && agent.ContainerID != "" {
+		ctx := req.Context()
+		// Stop and remove container
+		r.dockerMgr.StopContainer(ctx, agent.ContainerID)
+		r.dockerMgr.RemoveContainer(ctx, agent.ContainerID)
+	}
 
 	if err := r.agentStore.Delete(agentID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -348,7 +359,31 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 		return
 	}
 
-	// Create and start container (when Docker SDK is implemented)
+	ctx := req.Context()
+
+	// Create container if it doesn't exist
+	if agent.ContainerID == "" {
+		containerID, err := r.dockerMgr.CreateContainer(ctx, docker.ContainerConfig{
+			AgentID:     agent.ID,
+			AgentImage:  agent.Image,
+			PortalURL:   fmt.Sprintf("http://localhost:%d", 8080),
+			PortalToken: agent.BearerToken,
+			ListenPort:  agent.ListenPort,
+		})
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create container: %v", err), http.StatusInternalServerError)
+			return
+		}
+		agent.ContainerID = containerID
+		r.agentStore.Update(agent)
+	}
+
+	// Start container
+	if err := r.dockerMgr.StartContainer(ctx, agent.ContainerID); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to start container: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	r.agentStore.UpdateStatus(agentID, "running")
 
 	w.Header().Set("Content-Type", "application/json")
@@ -356,6 +391,14 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 }
 
 func (r *Router) doStopAgent(agentID string) {
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil || agent == nil || agent.ContainerID == "" {
+		r.agentStore.UpdateStatus(agentID, "stopped")
+		return
+	}
+
+	ctx := context.Background()
+	r.dockerMgr.StopContainer(ctx, agent.ContainerID)
 	r.agentStore.UpdateStatus(agentID, "stopped")
 }
 
@@ -367,12 +410,27 @@ func (r *Router) stopAgent(w http.ResponseWriter, req *http.Request, agentID str
 }
 
 func (r *Router) restartAgent(w http.ResponseWriter, req *http.Request, agentID string) {
-	// TODO: Implement actual Docker container restart
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil || agent == nil {
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	if agent.ContainerID == "" {
+		http.Error(w, "No container to restart", http.StatusBadRequest)
+		return
+	}
+
 	r.agentStore.UpdateStatus(agentID, "restarting")
 	
 	// Perform restart asynchronously
 	go func() {
-		// TODO: Call Docker restart API
+		ctx := context.Background()
+		if err := r.dockerMgr.RestartContainer(ctx, agent.ContainerID); err != nil {
+			log.Printf("Failed to restart container %s: %v", agent.ContainerID, err)
+			r.agentStore.UpdateStatus(agentID, "stopped")
+			return
+		}
 		r.agentStore.UpdateStatus(agentID, "running")
 	}()
 

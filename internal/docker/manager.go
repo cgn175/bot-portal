@@ -3,17 +3,25 @@ package docker
 import (
 	"context"
 	"fmt"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 // Manager handles Docker container lifecycle
-// Uses the Docker Engine API via docker/go-client
 type Manager struct {
-	// Docker client will be initialized when needed
+	cli *client.Client
 }
 
 // NewManager creates a new Docker manager
 func NewManager() (*Manager, error) {
-	return &Manager{}, nil
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create docker client: %w", err)
+	}
+	return &Manager{cli: cli}, nil
 }
 
 // ContainerConfig holds configuration for creating a container
@@ -27,35 +35,78 @@ type ContainerConfig struct {
 }
 
 // CreateContainer creates a new Docker container for an agent
-// TODO: Implement with docker/go-client SDK
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
-	// Placeholder - requires docker/go-client v1.0.0+ with proper module path
-	return "", fmt.Errorf("CreateContainer not implemented - requires docker/go-client SDK setup")
+	containerName := fmt.Sprintf("bot-portal-agent-%s", config.AgentID)
+
+	// Port binding
+	port := nat.Port(fmt.Sprintf("%d/tcp", config.ListenPort))
+	portBindings := nat.PortMap{
+		port: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", config.ListenPort)}},
+	}
+
+	// Container config
+	containerConfig := &container.Config{
+		Image: config.AgentImage,
+		Env: []string{
+			fmt.Sprintf("AGENT_ID=%s", config.AgentID),
+			fmt.Sprintf("PORTAL_URL=%s", config.PortalURL),
+			fmt.Sprintf("PORTAL_TOKEN=%s", config.PortalToken),
+			fmt.Sprintf("LISTEN_PORT=%d", config.ListenPort),
+			fmt.Sprintf("A2A_PEERS=%s", config.A2APeersJSON),
+		},
+		ExposedPorts: nat.PortSet{port: struct{}{}},
+	}
+
+	// Host config
+	hostConfig := &container.HostConfig{
+		PortBindings: portBindings,
+		NetworkMode:  "bot-portal",
+	}
+
+	// Network config
+	networkConfig := &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			"bot-portal": {},
+		},
+	}
+
+	resp, err := m.cli.ContainerCreate(ctx, containerConfig, hostConfig, networkConfig, nil, containerName)
+	if err != nil {
+		return "", fmt.Errorf("failed to create container: %w", err)
+	}
+
+	return resp.ID, nil
 }
 
 // StartContainer starts a Docker container
 func (m *Manager) StartContainer(ctx context.Context, containerID string) error {
-	return fmt.Errorf("StartContainer not implemented - requires docker/go-client SDK setup")
+	return m.cli.ContainerStart(ctx, containerID, container.StartOptions{})
 }
 
 // StopContainer stops a Docker container
 func (m *Manager) StopContainer(ctx context.Context, containerID string) error {
-	return fmt.Errorf("StopContainer not implemented - requires docker/go-client SDK setup")
+	timeout := 10
+	return m.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
 }
 
 // RestartContainer restarts a Docker container
 func (m *Manager) RestartContainer(ctx context.Context, containerID string) error {
-	return fmt.Errorf("RestartContainer not implemented - requires docker/go-client SDK setup")
+	timeout := 10
+	return m.cli.ContainerRestart(ctx, containerID, container.StopOptions{Timeout: &timeout})
 }
 
 // RemoveContainer removes a Docker container
 func (m *Manager) RemoveContainer(ctx context.Context, containerID string) error {
-	return fmt.Errorf("RemoveContainer not implemented - requires docker/go-client SDK setup")
+	return m.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 
 // GetContainerStatus returns the status of a container
 func (m *Manager) GetContainerStatus(ctx context.Context, containerID string) (string, error) {
-	return "", fmt.Errorf("GetContainerStatus not implemented - requires docker/go-client SDK setup")
+	inspect, err := m.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect container: %w", err)
+	}
+	return inspect.State.Status, nil
 }
 
 // ContainerInfo represents container information
@@ -78,10 +129,31 @@ type PortInfo struct {
 
 // EnsureNetwork ensures the bot-portal network exists
 func (m *Manager) EnsureNetwork(ctx context.Context) error {
+	networks, err := m.cli.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	for _, net := range networks {
+		if net.Name == "bot-portal" {
+			return nil
+		}
+	}
+
+	_, err = m.cli.NetworkCreate(ctx, "bot-portal", network.CreateOptions{
+		Driver: "bridge",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create network: %w", err)
+	}
+
 	return nil
 }
 
 // Close closes the Docker manager
 func (m *Manager) Close() error {
+	if m.cli != nil {
+		return m.cli.Close()
+	}
 	return nil
 }
