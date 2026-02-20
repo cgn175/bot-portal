@@ -17,27 +17,52 @@ We need a web-based portal to manage multiple zeroclaw AI agents. Each agent run
 - Portal acts as the A2A registry — agents discover each other through it
 
 ### ZeroClaw A2A Protocol (from `~/projects/zeroclaw`)
-Zeroclaw agents use a **custom A2A protocol** (not Google's standard A2A spec):
-- **Transport**: HTTP/2 + SSE for bidirectional communication
-- **Send**: `POST /a2a/send` — JSON body with `A2AMessage` envelope
-- **Stream**: `GET /a2a/stream/:session_id` — SSE response stream
-- **Health**: `GET /a2a/health` — public health check
-- **Pairing**: `POST /a2a/pair/request` + `POST /a2a/pair/confirm`
-- **Auth**: Bearer token per peer (encrypted at rest)
+Zeroclaw implements the **Google A2A Protocol** standard:
+- **Transport**: HTTP/HTTPS with SSE for streaming
+- **Discovery**: `GET /.well-known/agent.json` — returns AgentCard (name, description, capabilities, skills, endpoints)
+- **Create Task**: `POST /tasks` — creates a task with a `CreateTaskRequest` (message + optional metadata)
+- **Get Task**: `GET /tasks/{id}` — returns task status and result
+- **Stream Updates**: `GET /tasks/{id}/stream` — SSE stream of `TaskUpdate` events
+- **Cancel Task**: `POST /tasks/{id}/cancel` — cancel a running task
+- **Auth**: Bearer token per peer (static, configured in TOML)
 - **Port**: 9000 (configurable via `listen_port`)
 - **Config**: TOML at `~/.zeroclaw/config.toml` under `[channels_config.a2a]`
 
-#### A2AMessage Format
+#### Key Protocol Types (from `src/channels/a2a/protocol.rs`)
+
+**AgentCard** — Discovery document at `/.well-known/agent.json`:
 ```json
 {
-  "id": "uuid-v4",
-  "session_id": "conversation-thread-id",
-  "sender_id": "peer-identity",
-  "recipient_id": "target-peer",
-  "content": "message text",
-  "timestamp": 1700000000,
-  "reply_to": "optional-parent-message-id"
+  "name": "Agent Name",
+  "description": "What this agent does",
+  "version": "0.1.0",
+  "capabilities": { "streaming": true, "artifacts": true, "push_notifications": false },
+  "authentication": { "schemes": ["bearer"] },
+  "endpoints": { "tasks": "/tasks", "stream": "/tasks/{id}/stream" },
+  "skills": [{ "id": "skill-id", "name": "Skill", "description": "..." }]
 }
+```
+
+**Task** — Unit of work:
+```json
+{
+  "id": "task-123",
+  "status": "pending|running|completed|failed|cancelled",
+  "created_at": "ISO8601",
+  "updated_at": "ISO8601",
+  "messages": [{ "role": "user|agent", "content": "...", "timestamp": "ISO8601" }],
+  "artifacts": [{ "id": "art-1", "type": "file|image|data", "name": "...", "content": "..." }]
+}
+```
+
+**TaskUpdate** — SSE event:
+```json
+{ "task_id": "task-123", "status": "running", "message": {...}, "artifact": {...} }
+```
+
+**CreateTaskRequest**:
+```json
+{ "message": { "role": "user", "content": "Do something" }, "metadata": {} }
 ```
 
 #### Agent Config Structure (TOML)
@@ -48,10 +73,19 @@ listen_port = 9000
 discovery_mode = "static"
 allowed_peer_ids = ["*"]
 
+[channels_config.a2a.agent_card]
+name = "My Agent"
+description = "What this agent does"
+
+[[channels_config.a2a.agent_card.skills]]
+id = "code-review"
+name = "Code Review"
+description = "Review code for quality and security"
+
 [[channels_config.a2a.peers]]
 id = "agent-alpha"
 endpoint = "https://192.168.1.100:9000"
-bearer_token = "encrypted:..."
+bearer_token = "token-here"
 enabled = true
 
 [channels_config.a2a.rate_limit]
@@ -70,7 +104,7 @@ burst_size = 10
 | Database | **SQLite** (MVP) → **PostgreSQL** (scale) | Simple start, no infra overhead; easy migration path |
 | Real-time | **Server-Sent Events (SSE)** | A2A already uses SSE for streaming; consistent pattern; simpler than WebSocket for unidirectional updates |
 | Container Mgmt | **Docker Engine API** (Go SDK) | Direct container lifecycle control |
-| A2A Protocol | **ZeroClaw A2A** (HTTP/2 + SSE) | Native zeroclaw protocol; portal is both A2A peer and router |
+| A2A Protocol | **Google A2A Standard** (HTTP + SSE) | Task-based model; AgentCard discovery; portal is both A2A peer and router |
 
 ### Architecture Overview
 
@@ -100,21 +134,23 @@ burst_size = 10
 ### Component Breakdown
 
 #### 1. A2A Router (Core)
-The portal acts as a **zeroclaw A2A peer and message router**:
-- **Receives**: Agents send messages to portal via `POST /a2a/send` (portal listens on its own A2A port)
-- **Forwards**: Portal forwards messages to target agents via `POST /a2a/send` on their endpoints
-- **Streams**: Portal connects to each agent's `GET /a2a/stream/:session_id` for response streaming
+The portal acts as a **Google A2A peer and task/message router**:
+- **Receives tasks**: Agents create tasks on portal via `POST /tasks` (portal is itself an A2A server)
+- **Forwards tasks**: Portal creates tasks on target agents via `POST /tasks` on their endpoints
+- **Streams updates**: Portal subscribes to `GET /tasks/{id}/stream` on agents for TaskUpdate SSE events
+- **Serves own stream**: Portal exposes `GET /tasks/{id}/stream` for agents subscribing to task updates
+- **Discovery**: Portal serves its own AgentCard at `GET /.well-known/agent.json`
 - **Channel system**: Routes messages based on channel format:
-  - `agentA-id::agentB-id` — direct channel, routed to specific agent
-  - `general` — broadcast to all registered agents
-- **Message logging**: Every A2AMessage passing through is persisted with metadata (id, session_id, sender_id, recipient_id, content, timestamp, channel)
-- **Health monitoring**: Polls each agent's `GET /a2a/health` endpoint
+  - `agentA-id::agentB-id` — direct channel, task routed to specific agent
+  - `general` — broadcast task to all registered agents
+- **Message logging**: Every Task, TaskMessage, and TaskUpdate passing through is persisted with channel metadata
+- **Health monitoring**: Fetches each agent's `GET /.well-known/agent.json` to verify liveness
 
 #### 2. Agent Registry & Discovery
-- Portal maintains a registry of all agents (peer configs)
-- When an agent is registered, portal auto-generates bearer tokens and configures the agent's `config.toml` `[channels_config.a2a]` section
-- Each agent's peer list includes the portal + other agents it should communicate with
-- Portal exposes `GET /api/agents` — returns all registered agents and their status
+- Portal maintains a registry of all agents and their AgentCards
+- When an agent is registered, portal auto-generates bearer tokens and configures the agent's `config.toml` `[channels_config.a2a]` section (peers, agent_card, skills)
+- Portal fetches each agent's AgentCard at `GET /.well-known/agent.json` to populate skills and capabilities
+- Portal exposes `GET /api/agents` — returns all registered agents, their AgentCards, and status
 
 #### 3. Agent Lifecycle Manager
 - Uses Docker Engine API (Go SDK) to:
@@ -141,10 +177,12 @@ The portal acts as a **zeroclaw A2A peer and message router**:
 | `/api/agents/:id/logs` | GET (SSE) | Stream container logs |
 | `/api/channels` | GET | List all channels |
 | `/api/channels/:id/messages` | GET | Get channel message history |
-| `/api/messages/stream` | GET (SSE) | Real-time message stream |
-| `/a2a/send` | POST | ZeroClaw A2A receive endpoint (agents send messages here) |
-| `/a2a/stream/:session_id` | GET (SSE) | A2A response stream |
-| `/a2a/health` | GET | A2A health check |
+| `/api/messages/stream` | GET (SSE) | Real-time message stream (portal UI) |
+| `/.well-known/agent.json` | GET | Portal's own AgentCard (A2A discovery) |
+| `/tasks` | POST | Create task (A2A standard — agents send tasks here) |
+| `/tasks/:id` | GET | Get task status/result (A2A standard) |
+| `/tasks/:id/stream` | GET (SSE) | Subscribe to task updates (A2A standard) |
+| `/tasks/:id/cancel` | POST | Cancel a running task (A2A standard) |
 
 #### 5. Frontend (React)
 - **Dashboard**: Overview of all agents, their status (running/stopped/error)
@@ -158,17 +196,31 @@ The portal acts as a **zeroclaw A2A peer and message router**:
 ```go
 type Agent struct {
     ID          string            `json:"id"`          // zeroclaw peer ID
-    Name        string            `json:"name"`
-    Description string            `json:"description"`
+    Name        string            `json:"name"`        // from AgentCard.name
+    Description string            `json:"description"` // from AgentCard.description
     Image       string            `json:"image"`       // Docker image
     Status      string            `json:"status"`      // running, stopped, error
     ContainerID string            `json:"containerId"`
-    Endpoint    string            `json:"endpoint"`    // A2A endpoint (e.g. http://container:9000)
+    Endpoint    string            `json:"endpoint"`    // A2A base URL (e.g. http://container:9000)
     ListenPort  int               `json:"listenPort"`  // A2A listen port (default 9000)
     BearerToken string            `json:"-"`           // never exposed in API responses
+    AgentCard   *AgentCard        `json:"agentCard"`   // cached AgentCard from discovery
     Config      map[string]string `json:"config"`      // env vars / settings
     CreatedAt   time.Time         `json:"createdAt"`
     UpdatedAt   time.Time         `json:"updatedAt"`
+}
+```
+
+#### AgentCard (mirrored from zeroclaw protocol.rs)
+```go
+type AgentCard struct {
+    Name           string             `json:"name"`
+    Description    string             `json:"description"`
+    Version        string             `json:"version"`
+    Capabilities   AgentCapabilities  `json:"capabilities"`
+    Authentication AuthenticationInfo `json:"authentication"`
+    Endpoints      AgentEndpoints     `json:"endpoints"`
+    Skills         []Skill            `json:"skills"`
 }
 ```
 
@@ -181,18 +233,19 @@ type Channel struct {
 }
 ```
 
-#### MessageLog (mirrors zeroclaw A2AMessage)
+#### TaskLog (mirrors Google A2A Task lifecycle)
 ```go
-type MessageLog struct {
-    ID          string    `json:"id"`          // A2AMessage.id (UUID)
-    SessionID   string    `json:"sessionId"`   // A2AMessage.session_id
-    ChannelID   string    `json:"channelId"`   // derived: "sender::recipient" or "general"
-    SenderID    string    `json:"senderId"`    // A2AMessage.sender_id
-    RecipientID string    `json:"recipientId"` // A2AMessage.recipient_id
-    Content     string    `json:"content"`     // A2AMessage.content
-    ReplyTo     *string   `json:"replyTo"`     // A2AMessage.reply_to
-    Direction   string    `json:"direction"`   // inbound/outbound
-    Timestamp   time.Time `json:"timestamp"`   // from A2AMessage.timestamp
+type TaskLog struct {
+    ID          string          `json:"id"`          // Task ID
+    ChannelID   string          `json:"channelId"`   // derived: "sender::recipient" or "general"
+    SenderID    string          `json:"senderId"`    // agent that created the task
+    RecipientID string          `json:"recipientId"` // agent that received the task
+    Status      string          `json:"status"`      // pending, running, completed, failed, cancelled
+    Messages    json.RawMessage `json:"messages"`    // []TaskMessage JSON
+    Artifacts   json.RawMessage `json:"artifacts"`   // []Artifact JSON
+    Direction   string          `json:"direction"`   // inbound/outbound
+    CreatedAt   time.Time       `json:"createdAt"`
+    UpdatedAt   time.Time       `json:"updatedAt"`
 }
 ```
 
@@ -210,11 +263,11 @@ bot-portal/
 │   │   ├── messages.go          # Message log handlers
 │   │   └── sse.go               # SSE streaming
 │   ├── a2a/
-│   │   ├── router.go            # A2A message routing (channel logic)
-│   │   ├── client.go            # A2A client (POST /a2a/send to agents)
-│   │   ├── server.go            # A2A server (receive POST /a2a/send, SSE stream)
-│   │   ├── types.go             # ZeroClaw A2AMessage, A2APeer, A2AConfig types
-│   │   └── health.go            # Agent health check polling
+│   │   ├── router.go            # A2A task routing (channel logic)
+│   │   ├── client.go            # A2A client (POST /tasks, GET /tasks/{id}/stream)
+│   │   ├── server.go            # A2A server (receive POST /tasks, serve SSE stream)
+│   │   ├── types.go             # Google A2A types: AgentCard, Task, TaskMessage, etc.
+│   │   └── discovery.go         # AgentCard fetching & caching
 │   ├── docker/
 │   │   └── manager.go           # Docker container lifecycle
 │   ├── store/
