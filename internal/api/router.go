@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -232,8 +234,13 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Generate bearer token
-	token, _ := r.agentStore.GenerateBearerToken(agent.ID)
+	// Generate bearer token inline
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
+	token := hex.EncodeToString(b)
 
 	newAgent := &store.Agent{
 		ID:          agent.ID,
