@@ -56,8 +56,8 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 func (r *Router) Run(addr string) error {
 	// A2A endpoints (Google A2A Protocol)
 	http.HandleFunc("/.well-known/agent.json", r.handleAgentCard)
-	http.HandleFunc("/tasks", r.handleTasks)
-	http.HandleFunc("/tasks/", r.handleTaskDetail)
+	http.HandleFunc("/tasks", r.requireBearerToken(r.handleTasks))
+	http.HandleFunc("/tasks/", r.requireBearerToken(r.handleTaskDetail))
 
 	// REST API endpoints
 	// Agent management
@@ -78,6 +78,48 @@ func (r *Router) Run(addr string) error {
 
 	log.Printf("Server starting on %s", addr)
 	return http.ListenAndServe(addr, nil)
+}
+
+// ============================================================================
+// Authentication Middleware
+// ============================================================================
+
+func (r *Router) requireBearerToken(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		authHeader := req.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
+			return
+		}
+
+		const prefix = "Bearer "
+		if len(authHeader) < len(prefix) || authHeader[:len(prefix)] != prefix {
+			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+			return
+		}
+
+		token := authHeader[len(prefix):]
+		agents, err := r.agentStore.List()
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		valid := false
+		for _, agent := range agents {
+			if agent.BearerToken == token {
+				valid = true
+				break
+			}
+		}
+
+		if !valid {
+			http.Error(w, "Invalid bearer token", http.StatusUnauthorized)
+			return
+		}
+
+		next(w, req)
+	}
 }
 
 // ============================================================================
