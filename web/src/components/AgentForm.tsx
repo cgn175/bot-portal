@@ -52,6 +52,9 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
               onChange={e => setFormData({ ...formData, id: e.target.value })}
               placeholder="agent1"
             />
+            <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              Unique identifier for this agent (lowercase, no spaces)
+            </small>
           </div>
 
           <div className="form-group">
@@ -64,6 +67,9 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
               onChange={e => setFormData({ ...formData, name: e.target.value })}
               placeholder="My AI Agent"
             />
+            <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              Human-readable display name
+            </small>
           </div>
 
           <div className="form-group">
@@ -75,6 +81,9 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
               onChange={e => setFormData({ ...formData, description: e.target.value })}
               placeholder="What does this agent do?"
             />
+            <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              Optional description of the agent's purpose and capabilities
+            </small>
           </div>
 
           <div className="form-group">
@@ -87,6 +96,9 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
               onChange={e => setFormData({ ...formData, image: e.target.value })}
               placeholder="my-agent:latest"
             />
+            <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              Docker image name with tag (e.g., username/agent:v1.0)
+            </small>
           </div>
 
           <div className="form-group">
@@ -99,6 +111,9 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
               onChange={e => setFormData({ ...formData, endpoint: e.target.value })}
               placeholder="http://agent1:8080"
             />
+            <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              Internal endpoint URL (use container name for Docker network)
+            </small>
           </div>
 
           <div className="form-actions">
