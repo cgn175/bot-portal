@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  portal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot-portal
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - ./bot-portal.db:/app/bot-portal.db
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - bot-portal-network
+
+  # Mock agent for testing
+  mock-agent:
+    image: mock-agent:latest
+    container_name: mock-agent
+    ports:
+      - "9000:9000"
+    environment:
+      - PORT=9000
+      - AGENT_ID=mock-agent-1
+    networks:
+      - bot-portal-network
+
+networks:
+  bot-portal-network:
+    driver: bridge
