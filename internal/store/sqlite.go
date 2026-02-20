@@ -29,6 +29,7 @@ func RunMigrations(db *sql.DB) error {
 			name TEXT NOT NULL,
 			description TEXT,
 			image TEXT NOT NULL,
+			agent_type TEXT DEFAULT 'docker',
 			status TEXT DEFAULT 'stopped',
 			container_id TEXT,
 			endpoint TEXT,
@@ -59,12 +60,11 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_channel_id ON task_logs(channel_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_sender_id ON task_logs(sender_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at)`,
+		`ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'docker'`,
 	}
 
 	for _, migration := range migrations {
-		if _, err := db.Exec(migration); err != nil {
-			return fmt.Errorf("migration failed: %w", err)
-		}
+		_, _ = db.Exec(migration) // Ignore errors for ALTER TABLE if column exists
 	}
 
 	return nil

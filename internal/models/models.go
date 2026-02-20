@@ -11,6 +11,7 @@ type Agent struct {
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
 	Image       string            `json:"image"`
+	AgentType   string            `json:"agentType"` // "docker" or "native"
 	Status      string            `json:"status"`
 	ContainerID string            `json:"containerId"`
 	Endpoint    string            `json:"endpoint"`

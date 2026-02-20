@@ -250,15 +250,33 @@ func (r *Router) listAgents(w http.ResponseWriter, req *http.Request) {
 
 func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 	var agent struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Image    string `json:"image"`
-		Endpoint string `json:"endpoint"`
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Image       string `json:"image"`
+		AgentType   string `json:"agentType"`
+		Endpoint    string `json:"endpoint"`
 	}
 
 	if err := json.NewDecoder(req.Body).Decode(&agent); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	// Default to docker if not specified
+	if agent.AgentType == "" {
+		agent.AgentType = "docker"
+	}
+
+	// Validate agent type
+	if agent.AgentType != "docker" && agent.AgentType != "native" {
+		http.Error(w, "agentType must be 'docker' or 'native'", http.StatusBadRequest)
+		return
+	}
+
+	// For native agents, image is optional
+	if agent.AgentType == "native" && agent.Image == "" {
+		agent.Image = "native"
 	}
 
 	// Generate bearer token inline
@@ -269,12 +287,19 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 	}
 	token := hex.EncodeToString(b)
 
+	status := "stopped"
+	if agent.AgentType == "native" {
+		status = "running"
+	}
+
 	newAgent := &store.Agent{
 		ID:          agent.ID,
 		Name:        agent.Name,
+		Description: agent.Description,
 		Image:       agent.Image,
+		AgentType:   agent.AgentType,
 		Endpoint:    agent.Endpoint,
-		Status:      "stopped",
+		Status:      status,
 		BearerToken: token,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -359,6 +384,14 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 		return
 	}
 
+	// Native agents are always running
+	if agent.AgentType == "native" {
+		r.agentStore.UpdateStatus(agentID, "running")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "running", "message": "Native agent marked as running"})
+		return
+	}
+
 	ctx := req.Context()
 
 	// Create container if it doesn't exist
@@ -392,7 +425,17 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 
 func (r *Router) doStopAgent(agentID string) {
 	agent, err := r.agentStore.GetByID(agentID)
-	if err != nil || agent == nil || agent.ContainerID == "" {
+	if err != nil || agent == nil {
+		r.agentStore.UpdateStatus(agentID, "stopped")
+		return
+	}
+
+	// Native agents cannot be stopped
+	if agent.AgentType == "native" {
+		return
+	}
+
+	if agent.ContainerID == "" {
 		r.agentStore.UpdateStatus(agentID, "stopped")
 		return
 	}
@@ -403,6 +446,17 @@ func (r *Router) doStopAgent(agentID string) {
 }
 
 func (r *Router) stopAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil || agent == nil {
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	if agent.AgentType == "native" {
+		http.Error(w, "Cannot stop native agents", http.StatusBadRequest)
+		return
+	}
+
 	r.doStopAgent(agentID)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -413,6 +467,11 @@ func (r *Router) restartAgent(w http.ResponseWriter, req *http.Request, agentID 
 	agent, err := r.agentStore.GetByID(agentID)
 	if err != nil || agent == nil {
 		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	if agent.AgentType == "native" {
+		http.Error(w, "Cannot restart native agents", http.StatusBadRequest)
 		return
 	}
 

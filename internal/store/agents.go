@@ -15,6 +15,7 @@ type Agent struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Image       string          `json:"image"`
+	AgentType   string          `json:"agentType"`
 	Status      string          `json:"status"`
 	ContainerID string          `json:"containerId"`
 	Endpoint    string          `json:"endpoint"`
@@ -41,10 +42,14 @@ func (s *AgentStore) Create(agent *Agent) error {
 	agentCardJSON, _ := json.Marshal(agent.AgentCard)
 	configJSON, _ := json.Marshal(agent.Config)
 
+	if agent.AgentType == "" {
+		agent.AgentType = "docker"
+	}
+
 	_, err := s.db.Exec(`
-		INSERT INTO agents (id, name, description, image, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		agent.ID, agent.Name, agent.Description, agent.Image, agent.Status,
+		INSERT INTO agents (id, name, description, image, agent_type, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		agent.ID, agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status,
 		agent.ContainerID, agent.Endpoint, agent.ListenPort, agent.BearerToken,
 		agentCardJSON, configJSON, agent.CreatedAt, agent.UpdatedAt)
 	return err
@@ -56,9 +61,9 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 	var agentCardJSON, configJSON []byte
 
 	err := s.db.QueryRow(`
-		SELECT id, name, description, image, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at
+		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at
 		FROM agents WHERE id = ?`, id).Scan(
-		&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.Status,
+		&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 		&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
 		&agentCardJSON, &configJSON, &agent.CreatedAt, &agent.UpdatedAt)
 
@@ -86,7 +91,7 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 // List retrieves all agents
 func (s *AgentStore) List() ([]*Agent, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, description, image, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at
+		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at
 		FROM agents`)
 	if err != nil {
 		return nil, err
@@ -99,7 +104,7 @@ func (s *AgentStore) List() ([]*Agent, error) {
 		var agentCardJSON, configJSON []byte
 
 		err := rows.Scan(
-			&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.Status,
+			&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 			&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
 			&agentCardJSON, &configJSON, &agent.CreatedAt, &agent.UpdatedAt)
 		if err != nil {

@@ -87,7 +87,12 @@ export default function Dashboard() {
                 <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
                   {agent.name}
                 </h3>
-                <span className={`badge ${agent.status}`}>{agent.status}</span>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span className={`badge ${agent.status}`}>{agent.status}</span>
+                  <span className="badge" style={{ background: agent.agentType === 'docker' ? 'var(--color-primary)' : 'var(--color-warning)' }}>
+                    {agent.agentType}
+                  </span>
+                </div>
               </div>
               
               {agent.description && (
@@ -112,19 +117,23 @@ export default function Dashboard() {
                 <Link to={`/agents/${agent.id}`} className="btn btn-secondary" style={{ textDecoration: 'none', flex: 1 }}>
                   Details
                 </Link>
-                {agent.status === 'stopped' && (
-                  <button className="btn btn-primary" onClick={() => handleAction(agent.id, 'start')}>
-                    Start
-                  </button>
-                )}
-                {agent.status === 'running' && (
+                {agent.agentType === 'docker' && (
                   <>
-                    <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'restart')}>
-                      Restart
-                    </button>
-                    <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'stop')}>
-                      Stop
-                    </button>
+                    {agent.status === 'stopped' && (
+                      <button className="btn btn-primary" onClick={() => handleAction(agent.id, 'start')}>
+                        Start
+                      </button>
+                    )}
+                    {agent.status === 'running' && (
+                      <>
+                        <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'restart')}>
+                          Restart
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'stop')}>
+                          Stop
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
                 <button className="btn btn-danger" onClick={() => handleDelete(agent.id)}>

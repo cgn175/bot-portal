@@ -11,6 +11,7 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
     id: '',
     name: '',
     image: '',
+    agentType: 'docker',
     endpoint: '',
     description: ''
   })
@@ -58,6 +59,22 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
           </div>
 
           <div className="form-group">
+            <label htmlFor="agentType">Agent Type *</label>
+            <select
+              id="agentType"
+              required
+              value={formData.agentType}
+              onChange={e => setFormData({ ...formData, agentType: e.target.value as 'docker' | 'native' })}
+            >
+              <option value="docker">Docker Container</option>
+              <option value="native">Native Process</option>
+            </select>
+            <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              Docker: Managed by portal. Native: External process you manage
+            </small>
+          </div>
+
+          <div className="form-group">
             <label htmlFor="name">Name *</label>
             <input
               id="name"
@@ -87,17 +104,20 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="image">Docker Image *</label>
+            <label htmlFor="image">Docker Image {formData.agentType === 'docker' ? '*' : ''}</label>
             <input
               id="image"
               type="text"
-              required
+              required={formData.agentType === 'docker'}
               value={formData.image}
               onChange={e => setFormData({ ...formData, image: e.target.value })}
               placeholder="my-agent:latest"
+              disabled={formData.agentType === 'native'}
             />
             <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-              Docker image name with tag (e.g., username/agent:v1.0)
+              {formData.agentType === 'docker' 
+                ? 'Docker image name with tag (e.g., username/agent:v1.0)'
+                : 'Not required for native agents'}
             </small>
           </div>
 

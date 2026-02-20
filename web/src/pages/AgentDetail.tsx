@@ -92,22 +92,31 @@ export default function AgentDetail() {
             <h2 style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '0.5rem' }}>
               {agent.name}
             </h2>
-            <span className={`badge ${agent.status}`}>{agent.status}</span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <span className={`badge ${agent.status}`}>{agent.status}</span>
+              <span className="badge" style={{ background: agent.agentType === 'docker' ? 'var(--color-primary)' : 'var(--color-warning)' }}>
+                {agent.agentType}
+              </span>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {agent.status === 'stopped' && (
-              <button className="btn btn-primary" onClick={() => handleAction('start')}>
-                Start
-              </button>
-            )}
-            {agent.status === 'running' && (
+            {agent.agentType === 'docker' && (
               <>
-                <button className="btn btn-secondary" onClick={() => handleAction('restart')}>
-                  Restart
-                </button>
-                <button className="btn btn-secondary" onClick={() => handleAction('stop')}>
-                  Stop
-                </button>
+                {agent.status === 'stopped' && (
+                  <button className="btn btn-primary" onClick={() => handleAction('start')}>
+                    Start
+                  </button>
+                )}
+                {agent.status === 'running' && (
+                  <>
+                    <button className="btn btn-secondary" onClick={() => handleAction('restart')}>
+                      Restart
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => handleAction('stop')}>
+                      Stop
+                    </button>
+                  </>
+                )}
               </>
             )}
             <button className="btn btn-danger" onClick={handleDelete}>
@@ -123,6 +132,17 @@ export default function AgentDetail() {
         )}
 
         <div style={{ display: 'grid', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+              Agent Type
+            </label>
+            <div>
+              <span className="badge" style={{ background: agent.agentType === 'docker' ? 'var(--color-primary)' : 'var(--color-warning)' }}>
+                {agent.agentType === 'docker' ? 'Docker Container' : 'Native Process'}
+              </span>
+            </div>
+          </div>
+
           <div>
             <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
               Agent ID
@@ -146,7 +166,7 @@ export default function AgentDetail() {
               Docker Image
             </label>
             <code style={{ display: 'block', padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
-              {agent.image}
+              {agent.image || 'N/A'}
             </code>
           </div>
 
