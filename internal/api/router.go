@@ -309,8 +309,8 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 }
 
 func (r *Router) deleteAgent(w http.ResponseWriter, req *http.Request, agentID string) {
-	// Stop container first
-	r.stopAgent(w, req, agentID)
+	// Stop container first (without writing HTTP response)
+	r.doStopAgent(agentID)
 
 	if err := r.agentStore.Delete(agentID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -334,8 +334,12 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 	json.NewEncoder(w).Encode(map[string]string{"status": "started"})
 }
 
-func (r *Router) stopAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+func (r *Router) doStopAgent(agentID string) {
 	r.agentStore.UpdateStatus(agentID, "stopped")
+}
+
+func (r *Router) stopAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+	r.doStopAgent(agentID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "stopped"})
