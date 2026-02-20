@@ -346,12 +346,17 @@ func (r *Router) stopAgent(w http.ResponseWriter, req *http.Request, agentID str
 }
 
 func (r *Router) restartAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+	// TODO: Implement actual Docker container restart
 	r.agentStore.UpdateStatus(agentID, "restarting")
-	time.Sleep(500 * time.Millisecond)
-	r.agentStore.UpdateStatus(agentID, "running")
+	
+	// Perform restart asynchronously
+	go func() {
+		// TODO: Call Docker restart API
+		r.agentStore.UpdateStatus(agentID, "running")
+	}()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "restarted"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
 }
 
 func (r *Router) streamAgentLogs(w http.ResponseWriter, req *http.Request, agentID string) {
