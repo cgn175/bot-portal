@@ -90,7 +90,7 @@ func (r *Router) HandleTaskCreate(w http.ResponseWriter, req *http.Request) {
 
 // HandleTaskGet handles GET /tasks/{id}
 func (r *Router) HandleTaskGet(w http.ResponseWriter, req *http.Request) {
-	taskID := req.PathValue("id")
+	taskID, _ := req.Context().Value("taskID").(string)
 
 	if r.GetTask != nil {
 		task, err := r.GetTask(taskID)
@@ -113,7 +113,7 @@ func (r *Router) HandleTaskGet(w http.ResponseWriter, req *http.Request) {
 
 // HandleTaskStream handles GET /tasks/{id}/stream - SSE
 func (r *Router) HandleTaskStream(w http.ResponseWriter, req *http.Request) {
-	taskID := req.PathValue("id")
+	taskID, _ := req.Context().Value("taskID").(string)
 
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -165,7 +165,7 @@ func (r *Router) HandleTaskStream(w http.ResponseWriter, req *http.Request) {
 
 // HandleTaskCancel handles POST /tasks/{id}/cancel
 func (r *Router) HandleTaskCancel(w http.ResponseWriter, req *http.Request) {
-	taskID := req.PathValue("id")
+	taskID, _ := req.Context().Value("taskID").(string)
 
 	if r.UpdateTaskStatus != nil {
 		err := r.UpdateTaskStatus(taskID, string(TaskStatusCancelled))
