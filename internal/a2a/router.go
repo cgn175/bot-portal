@@ -1,10 +1,12 @@
 package a2a
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -305,7 +307,8 @@ func generateTaskID() string {
 func splitChannelID(channelID, senderID string) string {
 	// Format: agent1::agent2
 	// Extract the other agent
-	for _, part := range []string{channelID[:len(channelID)/2], channelID[len(channelID)/2:]} {
+	parts := strings.SplitN(channelID, "::", 2)
+	for _, part := range parts {
 		if part != senderID && part != "" {
 			return part
 		}
