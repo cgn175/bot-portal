@@ -56,30 +56,51 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 
 // Run starts the HTTP server
 func (r *Router) Run(addr string) error {
+	mux := http.NewServeMux()
+
 	// A2A endpoints (Google A2A Protocol)
-	http.HandleFunc("/.well-known/agent.json", r.handleAgentCard)
-	http.HandleFunc("/tasks", r.requireBearerToken(r.handleTasks))
-	http.HandleFunc("/tasks/", r.requireBearerToken(r.handleTaskDetail))
+	mux.HandleFunc("/.well-known/agent.json", r.handleAgentCard)
+	mux.HandleFunc("/tasks", r.requireBearerToken(r.handleTasks))
+	mux.HandleFunc("/tasks/", r.requireBearerToken(r.handleTaskDetail))
 
 	// REST API endpoints
 	// Agent management
-	http.HandleFunc("/api/agents", r.handleAgents)
-	http.HandleFunc("/api/agents/", r.handleAgentDetail)
+	mux.HandleFunc("/api/agents", r.handleAgents)
+	mux.HandleFunc("/api/agents/", r.handleAgentDetail)
 
 	// Channel management
-	http.HandleFunc("/api/channels", r.handleChannels)
-	http.HandleFunc("/api/channels/", r.handleChannelDetail)
+	mux.HandleFunc("/api/channels", r.handleChannels)
+	mux.HandleFunc("/api/channels/", r.handleChannelDetail)
 
 	// Messages
-	http.HandleFunc("/api/messages/stream", r.handleMessageStream)
+	mux.HandleFunc("/api/messages/stream", r.handleMessageStream)
 
 	// Health check
-	http.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("OK"))
 	})
 
+	// Wrap with CORS middleware
+	handler := r.corsMiddleware(mux)
+
 	log.Printf("Server starting on %s", addr)
-	return http.ListenAndServe(addr, nil)
+	return http.ListenAndServe(addr, handler)
+}
+
+// corsMiddleware adds CORS headers for frontend dev
+func (r *Router) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if req.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, req)
+	})
 }
 
 // ============================================================================
