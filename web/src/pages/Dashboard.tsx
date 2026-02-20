@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import AgentForm from '../components/AgentForm'
 
 interface Agent {
   id: string
@@ -11,8 +12,10 @@ interface Agent {
 export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
 
-  useEffect(() => {
+  const loadAgents = () => {
+    setLoading(true)
     fetch('/api/agents')
       .then(res => res.json())
       .then(data => {
@@ -20,7 +23,16 @@ export default function Dashboard() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadAgents()
   }, [])
+
+  const handleAgentCreated = () => {
+    setShowForm(false)
+    loadAgents()
+  }
 
   if (loading) {
     return <div>Loading...</div>
@@ -28,9 +40,15 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
-      <h2>Agents</h2>
+      <div className="dashboard-header">
+        <h2>Agents</h2>
+        <button className="btn-primary" onClick={() => setShowForm(true)}>
+          + Register Agent
+        </button>
+      </div>
+
       <div className="agent-grid">
-        {agents.length === 0 ? (
+        {!agents || agents.length === 0 ? (
           <p>No agents registered yet.</p>
         ) : (
           agents.map(agent => (
@@ -43,6 +61,13 @@ export default function Dashboard() {
           ))
         )}
       </div>
+
+      {showForm && (
+        <AgentForm
+          onSuccess={handleAgentCreated}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
     </div>
   )
 }
