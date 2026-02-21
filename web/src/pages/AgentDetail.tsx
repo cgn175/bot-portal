@@ -1,60 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api, Agent } from '../api/client'
+import { useAgents } from '../contexts/AgentContext'
+import { api } from '../api/client'
 
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [agent, setAgent] = useState<Agent | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { agents, refreshAgents } = useAgents()
+  const agent = agents.find(a => a.id === id)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const loadAgent = async () => {
-    if (!id) return
-    try {
-      setLoading(true)
-      const data = await api.getAgent(id)
-      setAgent(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agent')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!id) return
-    
-    loadAgent()
-
-    // Use SSE for real-time updates
-    const eventSource = new EventSource('/api/agents-stream')
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const agents = JSON.parse(event.data)
-        const updated = agents.find((a: Agent) => a.id === id)
-        if (updated) {
-          setAgent(updated)
-          setLoading(false)
-        }
-      } catch (err) {
-        console.error('Failed to parse SSE data:', err)
-      }
-    }
-
-    eventSource.onerror = () => {
-      eventSource.close()
-      // Fallback to polling if SSE fails
-      const interval = setInterval(loadAgent, 10000)
-      return () => clearInterval(interval)
-    }
-
-    return () => eventSource.close()
-  }, [id])
-
-  const handleAction = async (action: 'start' | 'stop' | 'restart') => {
+  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
     if (!id) return
     try {
       setError('')
@@ -63,13 +20,13 @@ export default function AgentDetail() {
       else if (action === 'stop') await api.stopAgent(id)
       else await api.restartAgent(id)
       setSuccess(`Agent ${action}ed successfully`)
-      setTimeout(loadAgent, 1000)
+      setTimeout(refreshAgents, 1000)
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action} agent`)
     }
-  }
+  }, [id, refreshAgents])
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!id || !confirm(`Delete agent ${id}? This cannot be undone.`)) return
     try {
       await api.deleteAgent(id)
@@ -77,19 +34,15 @@ export default function AgentDetail() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete agent')
     }
-  }
+  }, [id, navigate])
 
-  const copyToken = () => {
+  const copyToken = useCallback(() => {
     if (agent?.bearer_token) {
       navigator.clipboard.writeText(agent.bearer_token)
       setSuccess('Bearer token copied to clipboard')
       setTimeout(() => setSuccess(''), 3000)
     }
-  }
-
-  if (loading && !agent) {
-    return <div className="loading">Loading agent...</div>
-  }
+  }, [agent?.bearer_token])
 
   if (!agent) {
     return (

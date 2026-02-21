@@ -1,88 +1,40 @@
-import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { api, Agent } from '../api/client'
+import { useState, useCallback } from 'react'
+import { useAgents } from '../contexts/AgentContext'
+import { api } from '../api/client'
 import AgentForm from '../components/AgentForm'
+import AgentGrid from '../components/AgentGrid'
 
 export default function Dashboard() {
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const { agents, loading, error, refreshAgents } = useAgents()
   const [showForm, setShowForm] = useState(false)
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const [actionError, setActionError] = useState('')
 
-  const loadAgents = async () => {
-    try {
-      setLoading(true)
-      setError('')
-      const data = await api.listAgents()
-      setAgents(data || [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agents')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadAgents()
-
-    // Use SSE for real-time updates
-    eventSourceRef.current = new EventSource('/api/agents-stream')
-    
-    eventSourceRef.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        // Don't update if form is open to prevent losing user input
-        if (!showForm) {
-          setAgents(prev => {
-            // Only update if data actually changed
-            if (JSON.stringify(prev) !== JSON.stringify(data)) {
-              return data || []
-            }
-            return prev
-          })
-          setLoading(false)
-        }
-      } catch (err) {
-        console.error('Failed to parse SSE data:', err)
-      }
-    }
-
-    eventSourceRef.current.onerror = () => {
-      eventSourceRef.current?.close()
-    }
-
-    return () => {
-      eventSourceRef.current?.close()
-    }
-  }, [showForm])
-
-  const handleAgentCreated = () => {
+  const handleAgentCreated = useCallback(() => {
     setShowForm(false)
-    loadAgents()
-  }
+    refreshAgents()
+  }, [refreshAgents])
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     if (!confirm(`Delete agent ${id}?`)) return
     try {
       await api.deleteAgent(id)
-      loadAgents()
+      refreshAgents()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete agent')
+      setActionError(err instanceof Error ? err.message : 'Failed to delete agent')
     }
-  }
+  }, [refreshAgents])
 
-  const handleAction = async (id: string, action: 'start' | 'stop' | 'restart') => {
+  const handleAction = useCallback(async (id: string, action: 'start' | 'stop' | 'restart') => {
     try {
-      setError('')
+      setActionError('')
       if (action === 'start') await api.startAgent(id)
       else if (action === 'stop') await api.stopAgent(id)
       else await api.restartAgent(id)
-      setTimeout(loadAgents, 1000)
+      setTimeout(refreshAgents, 1000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action} agent`)
+      setActionError(err instanceof Error ? err.message : `Failed to ${action} agent`)
     }
-  }
+  }, [refreshAgents])
 
   if (loading && agents.length === 0) {
     return <div className="loading">Loading agents...</div>
@@ -98,6 +50,7 @@ export default function Dashboard() {
       </div>
 
       {error && <div className="error-message">{error}</div>}
+      {actionError && <div className="error-message">{actionError}</div>}
 
       {agents.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
@@ -109,69 +62,7 @@ export default function Dashboard() {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-          {agents.map(agent => (
-            <div key={agent.id} className="card">
-              <div style={{ marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-                  {agent.name}
-                </h3>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span className={`badge ${agent.status}`}>{agent.status}</span>
-                  <span className="badge" style={{ background: agent.agentType === 'docker' ? 'var(--color-primary)' : 'var(--color-warning)' }}>
-                    {agent.agentType}
-                  </span>
-                </div>
-              </div>
-              
-              {agent.description && (
-                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                  {agent.description}
-                </p>
-              )}
-              
-              <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
-                <div style={{ marginBottom: '0.25rem' }}>
-                  <strong>ID:</strong> <code>{agent.id}</code>
-                </div>
-                <div style={{ marginBottom: '0.25rem' }}>
-                  <strong>Endpoint:</strong> <code>{agent.endpoint}</code>
-                </div>
-                <div>
-                  <strong>Image:</strong> <code>{agent.image}</code>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <Link to={`/agents/${agent.id}`} className="btn btn-secondary" style={{ textDecoration: 'none', flex: 1 }}>
-                  Details
-                </Link>
-                {agent.agentType === 'docker' && (
-                  <>
-                    {agent.status === 'stopped' && (
-                      <button className="btn btn-primary" onClick={() => handleAction(agent.id, 'start')}>
-                        Start
-                      </button>
-                    )}
-                    {agent.status === 'running' && (
-                      <>
-                        <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'restart')}>
-                          Restart
-                        </button>
-                        <button className="btn btn-secondary" onClick={() => handleAction(agent.id, 'stop')}>
-                          Stop
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-                <button className="btn btn-danger" onClick={() => handleDelete(agent.id)}>
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <AgentGrid agents={agents} onDelete={handleDelete} onAction={handleAction} />
       )}
 
       {showForm && (
