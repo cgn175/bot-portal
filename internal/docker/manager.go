@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -37,38 +36,6 @@ type ContainerConfig struct {
 
 // CreateContainer creates a new Docker container for an agent
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
-	// Try to find the image - Docker API might add docker.io/library/ prefix
-	// Try exact match first, then with common prefixes
-	imagesToTry := []string{
-		config.AgentImage,
-		"docker.io/library/" + config.AgentImage,
-		"docker.io/" + config.AgentImage,
-	}
-
-	var foundImage string
-	var lastErr error
-
-	for _, imgName := range imagesToTry {
-		_, _, err := m.cli.ImageInspectWithRaw(ctx, imgName)
-		if err == nil {
-			foundImage = imgName
-			break
-		}
-		lastErr = err
-	}
-
-	if foundImage == "" {
-		// List all images for debugging
-		images, _ := m.cli.ImageList(ctx, image.ListOptions{All: true})
-		var availableImages []string
-		for _, img := range images {
-			availableImages = append(availableImages, img.RepoTags...)
-		}
-		return "", fmt.Errorf("image '%s' not found locally. Available images: %v. Last error: %w", config.AgentImage, availableImages, lastErr)
-	}
-
-	fmt.Printf("Using image: %s\n", foundImage)
-
 	containerName := fmt.Sprintf("bot-portal-agent-%s", config.AgentID)
 
 	// Port binding
@@ -77,7 +44,7 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		port: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", config.ListenPort)}},
 	}
 
-	// Container config
+	// Container config - use image name as-is, Docker will find it
 	containerConfig := &container.Config{
 		Image: config.AgentImage,
 		Env: []string{
@@ -92,8 +59,10 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 
 	// Host config
 	hostConfig := &container.HostConfig{
-		PortBindings: portBindings,
-		NetworkMode:  "bot-portal",
+		PortBindings:    portBindings,
+		NetworkMode:     "bot-portal",
+		AutoRemove:      false,
+		PublishAllPorts: false,
 	}
 
 	// Network config
@@ -105,9 +74,10 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 
 	resp, err := m.cli.ContainerCreate(ctx, containerConfig, hostConfig, networkConfig, nil, containerName)
 	if err != nil {
-		return "", fmt.Errorf("failed to create container: %w", err)
+		return "", fmt.Errorf("failed to create container with image '%s': %w", config.AgentImage, err)
 	}
 
+	fmt.Printf("Created container %s with image %s\n", resp.ID[:12], config.AgentImage)
 	return resp.ID, nil
 }
 
