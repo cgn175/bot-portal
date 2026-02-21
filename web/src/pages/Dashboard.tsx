@@ -31,8 +31,11 @@ export default function Dashboard() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        setAgents(data || [])
-        setLoading(false)
+        // Don't update if form is open to prevent losing user input
+        if (!showForm) {
+          setAgents(data || [])
+          setLoading(false)
+        }
       } catch (err) {
         console.error('Failed to parse SSE data:', err)
       }
@@ -41,12 +44,14 @@ export default function Dashboard() {
     eventSource.onerror = () => {
       eventSource.close()
       // Fallback to polling if SSE fails
-      const interval = setInterval(loadAgents, 10000)
+      const interval = setInterval(() => {
+        if (!showForm) loadAgents()
+      }, 10000)
       return () => clearInterval(interval)
     }
 
     return () => eventSource.close()
-  }, [])
+  }, [showForm])
 
   const handleAgentCreated = () => {
     setShowForm(false)
