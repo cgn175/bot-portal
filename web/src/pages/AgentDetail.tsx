@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAgents } from '../contexts/AgentContext'
 import { api } from '../api/client'
+import AgentForm from '../components/AgentForm'
 
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -10,6 +11,7 @@ export default function AgentDetail() {
   const agent = agents.find(a => a.id === id)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [showEditForm, setShowEditForm] = useState(false)
 
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
     if (!id) return
@@ -43,6 +45,13 @@ export default function AgentDetail() {
       setTimeout(() => setSuccess(''), 3000)
     }
   }, [agent?.bearer_token])
+
+  const handleEditSuccess = useCallback(() => {
+    setShowEditForm(false)
+    setSuccess('Agent updated successfully')
+    setTimeout(() => setSuccess(''), 3000)
+    refreshAgents()
+  }, [refreshAgents])
 
   if (!agent) {
     return (
@@ -78,6 +87,9 @@ export default function AgentDetail() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn btn-secondary" onClick={() => setShowEditForm(true)}>
+              Edit
+            </button>
             {agent.agentType === 'docker' && (
               <>
                 {agent.status === 'stopped' && (
@@ -193,6 +205,14 @@ export default function AgentDetail() {
           </button>
         </div>
       </div>
+
+      {showEditForm && (
+        <AgentForm
+          agent={agent}
+          onSuccess={handleEditSuccess}
+          onCancel={() => setShowEditForm(false)}
+        />
+      )}
     </div>
   )
 }

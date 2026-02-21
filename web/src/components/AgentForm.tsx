@@ -1,12 +1,13 @@
-import { useState } from 'react'
-import { api, CreateAgentRequest } from '../api/client'
+import { useState, useEffect } from 'react'
+import { api, CreateAgentRequest, Agent } from '../api/client'
 
 interface AgentFormProps {
+  agent?: Agent
   onSuccess: () => void
   onCancel: () => void
 }
 
-export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
+export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps) {
   const [formData, setFormData] = useState<CreateAgentRequest>({
     id: '',
     name: '',
@@ -18,16 +19,33 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    if (agent) {
+      setFormData({
+        id: agent.id,
+        name: agent.name,
+        image: agent.image,
+        agentType: agent.agentType,
+        endpoint: agent.endpoint,
+        description: agent.description || ''
+      })
+    }
+  }, [agent])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
     try {
-      await api.createAgent(formData)
+      if (agent) {
+        await api.updateAgent(agent.id, formData)
+      } else {
+        await api.createAgent(formData)
+      }
       onSuccess()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create agent')
+      setError(err instanceof Error ? err.message : `Failed to ${agent ? 'update' : 'create'} agent`)
     } finally {
       setLoading(false)
     }
@@ -37,7 +55,7 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>
-          Register New Agent
+          {agent ? 'Edit Agent' : 'Register New Agent'}
         </h3>
         
         {error && <div className="error-message">{error}</div>}
@@ -52,9 +70,10 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
               value={formData.id}
               onChange={e => setFormData({ ...formData, id: e.target.value })}
               placeholder="agent1"
+              disabled={!!agent}
             />
             <small style={{ display: 'block', marginTop: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-              Unique identifier for this agent (lowercase, no spaces)
+              {agent ? 'Agent ID cannot be changed' : 'Unique identifier for this agent (lowercase, no spaces)'}
             </small>
           </div>
 
@@ -141,7 +160,7 @@ export default function AgentForm({ onSuccess, onCancel }: AgentFormProps) {
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Agent'}
+              {loading ? (agent ? 'Updating...' : 'Creating...') : (agent ? 'Update Agent' : 'Create Agent')}
             </button>
           </div>
         </form>
