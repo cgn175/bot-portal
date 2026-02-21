@@ -60,11 +60,19 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_channel_id ON task_logs(channel_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_sender_id ON task_logs(sender_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at)`,
-		`ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'docker'`,
 	}
 
 	for _, migration := range migrations {
-		_, _ = db.Exec(migration) // Ignore errors for ALTER TABLE if column exists
+		if _, err := db.Exec(migration); err != nil {
+			return fmt.Errorf("migration failed: %w", err)
+		}
+	}
+
+	// Check if agent_type column exists, add if not
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('agents') WHERE name='agent_type'`).Scan(&count)
+	if err == nil && count == 0 {
+		_, _ = db.Exec(`ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'docker'`)
 	}
 
 	return nil
