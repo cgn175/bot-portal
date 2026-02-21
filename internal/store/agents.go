@@ -135,9 +135,9 @@ func (s *AgentStore) Update(agent *Agent) error {
 	configJSON, _ := json.Marshal(agent.Config)
 
 	_, err := s.db.Exec(`
-		UPDATE agents SET name = ?, description = ?, image = ?, status = ?, container_id = ?, endpoint = ?, listen_port = ?, bearer_token = ?, agent_card = ?, config = ?, updated_at = ?
+		UPDATE agents SET name = ?, description = ?, image = ?, agent_type = ?, status = ?, container_id = ?, endpoint = ?, listen_port = ?, bearer_token = ?, agent_card = ?, config = ?, updated_at = ?
 		WHERE id = ?`,
-		agent.Name, agent.Description, agent.Image, agent.Status, agent.ContainerID,
+		agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status, agent.ContainerID,
 		agent.Endpoint, agent.ListenPort, agent.BearerToken, agentCardJSON, configJSON,
 		agent.UpdatedAt, agent.ID)
 	return err
