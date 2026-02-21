@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// Initialize SQLite store
-	db, err := store.NewSQLite("bot-portal.db")
+	db, err := store.NewSQLite("db/portal.db")
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}

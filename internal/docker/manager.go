@@ -3,8 +3,10 @@ package docker
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -36,6 +38,19 @@ type ContainerConfig struct {
 
 // CreateContainer creates a new Docker container for an agent
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
+	// Check if image exists locally, if not try to pull it
+	_, _, err := m.cli.ImageInspectWithRaw(ctx, config.AgentImage)
+	if err != nil {
+		// Image doesn't exist locally, try to pull it
+		reader, pullErr := m.cli.ImagePull(ctx, config.AgentImage, image.PullOptions{})
+		if pullErr != nil {
+			return "", fmt.Errorf("image not found locally and pull failed: %w", pullErr)
+		}
+		defer reader.Close()
+		// Consume the pull output to ensure it completes
+		io.Copy(io.Discard, reader)
+	}
+
 	containerName := fmt.Sprintf("bot-portal-agent-%s", config.AgentID)
 
 	// Port binding
