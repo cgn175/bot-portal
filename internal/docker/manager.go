@@ -37,19 +37,37 @@ type ContainerConfig struct {
 
 // CreateContainer creates a new Docker container for an agent
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
-	// Check if image exists locally
-	imageData, _, err := m.cli.ImageInspectWithRaw(ctx, config.AgentImage)
-	if err != nil {
-		// Try to list all images to help debug
-		images, _ := m.cli.ImageList(ctx, image.ListOptions{})
+	// Try to find the image - Docker API might add docker.io/library/ prefix
+	// Try exact match first, then with common prefixes
+	imagesToTry := []string{
+		config.AgentImage,
+		"docker.io/library/" + config.AgentImage,
+		"docker.io/" + config.AgentImage,
+	}
+
+	var foundImage string
+	var lastErr error
+
+	for _, imgName := range imagesToTry {
+		_, _, err := m.cli.ImageInspectWithRaw(ctx, imgName)
+		if err == nil {
+			foundImage = imgName
+			break
+		}
+		lastErr = err
+	}
+
+	if foundImage == "" {
+		// List all images for debugging
+		images, _ := m.cli.ImageList(ctx, image.ListOptions{All: true})
 		var availableImages []string
 		for _, img := range images {
 			availableImages = append(availableImages, img.RepoTags...)
 		}
-		return "", fmt.Errorf("image '%s' not found locally. Available images: %v. Error: %w", config.AgentImage, availableImages, err)
+		return "", fmt.Errorf("image '%s' not found locally. Available images: %v. Last error: %w", config.AgentImage, availableImages, lastErr)
 	}
 
-	fmt.Printf("Using image: %s (ID: %s)\n", config.AgentImage, imageData.ID)
+	fmt.Printf("Using image: %s\n", foundImage)
 
 	containerName := fmt.Sprintf("bot-portal-agent-%s", config.AgentID)
 
