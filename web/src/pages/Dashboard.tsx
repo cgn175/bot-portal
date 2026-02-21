@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api, Agent } from '../api/client'
 import AgentForm from '../components/AgentForm'
@@ -8,6 +8,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const eventSourceRef = useRef<EventSource | null>(null)
 
   const loadAgents = async () => {
     try {
@@ -26,14 +27,20 @@ export default function Dashboard() {
     loadAgents()
 
     // Use SSE for real-time updates
-    const eventSource = new EventSource('/api/agents-stream')
+    eventSourceRef.current = new EventSource('/api/agents-stream')
     
-    eventSource.onmessage = (event) => {
+    eventSourceRef.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
         // Don't update if form is open to prevent losing user input
         if (!showForm) {
-          setAgents(data || [])
+          setAgents(prev => {
+            // Only update if data actually changed
+            if (JSON.stringify(prev) !== JSON.stringify(data)) {
+              return data || []
+            }
+            return prev
+          })
           setLoading(false)
         }
       } catch (err) {
@@ -41,16 +48,13 @@ export default function Dashboard() {
       }
     }
 
-    eventSource.onerror = () => {
-      eventSource.close()
-      // Fallback to polling if SSE fails
-      const interval = setInterval(() => {
-        if (!showForm) loadAgents()
-      }, 10000)
-      return () => clearInterval(interval)
+    eventSourceRef.current.onerror = () => {
+      eventSourceRef.current?.close()
     }
 
-    return () => eventSource.close()
+    return () => {
+      eventSourceRef.current?.close()
+    }
   }, [showForm])
 
   const handleAgentCreated = () => {
