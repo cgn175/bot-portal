@@ -73,6 +73,7 @@ func (r *Router) Run(addr string) error {
 	// Agent management
 	mux.HandleFunc("/api/agents", r.handleAgents)
 	mux.HandleFunc("/api/agents/", r.handleAgentDetail)
+	mux.HandleFunc("/api/agents-stream", r.streamAgents)
 
 	// Channel management
 	mux.HandleFunc("/api/channels", r.handleChannels)
@@ -504,6 +505,38 @@ func (r *Router) streamAgentLogs(w http.ResponseWriter, req *http.Request, agent
 
 	// Send mock log data (when Docker SDK is implemented)
 	fmt.Fprintf(w, "data: Log streaming not yet implemented\n\n")
+}
+
+func (r *Router) streamAgents(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	ctx := req.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			agents, err := r.agentStore.List()
+			if err != nil {
+				continue
+			}
+			data, _ := json.Marshal(agents)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
 }
 
 // ============================================================================

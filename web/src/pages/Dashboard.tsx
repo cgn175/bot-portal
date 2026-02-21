@@ -24,8 +24,28 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadAgents()
-    const interval = setInterval(loadAgents, 5000)
-    return () => clearInterval(interval)
+
+    // Use SSE for real-time updates
+    const eventSource = new EventSource('/api/agents-stream')
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        setAgents(data || [])
+        setLoading(false)
+      } catch (err) {
+        console.error('Failed to parse SSE data:', err)
+      }
+    }
+
+    eventSource.onerror = () => {
+      eventSource.close()
+      // Fallback to polling if SSE fails
+      const interval = setInterval(loadAgents, 10000)
+      return () => clearInterval(interval)
+    }
+
+    return () => eventSource.close()
   }, [])
 
   const handleAgentCreated = () => {

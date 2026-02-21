@@ -41,8 +41,28 @@ export default function MessageViewer() {
     }
 
     loadMessages()
-    const interval = setInterval(loadMessages, 3000)
-    return () => clearInterval(interval)
+
+    // Use SSE for real-time message updates
+    const eventSource = api.streamMessages(selectedChannel)
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        setMessages(data || [])
+        setLoading(false)
+      } catch (err) {
+        console.error('Failed to parse SSE data:', err)
+      }
+    }
+
+    eventSource.onerror = () => {
+      eventSource.close()
+      // Fallback to polling if SSE fails
+      const interval = setInterval(loadMessages, 10000)
+      return () => clearInterval(interval)
+    }
+
+    return () => eventSource.close()
   }, [selectedChannel])
 
   return (

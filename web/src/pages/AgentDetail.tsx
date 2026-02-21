@@ -24,9 +24,34 @@ export default function AgentDetail() {
   }
 
   useEffect(() => {
+    if (!id) return
+    
     loadAgent()
-    const interval = setInterval(loadAgent, 3000)
-    return () => clearInterval(interval)
+
+    // Use SSE for real-time updates
+    const eventSource = new EventSource('/api/agents-stream')
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const agents = JSON.parse(event.data)
+        const updated = agents.find((a: Agent) => a.id === id)
+        if (updated) {
+          setAgent(updated)
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error('Failed to parse SSE data:', err)
+      }
+    }
+
+    eventSource.onerror = () => {
+      eventSource.close()
+      // Fallback to polling if SSE fails
+      const interval = setInterval(loadAgent, 10000)
+      return () => clearInterval(interval)
+    }
+
+    return () => eventSource.close()
   }, [id])
 
   const handleAction = async (action: 'start' | 'stop' | 'restart') => {
