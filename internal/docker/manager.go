@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -38,15 +39,30 @@ type ContainerConfig struct {
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
 	containerName := fmt.Sprintf("bot-portal-agent-%s", config.AgentID)
 
+	// Try to get the image ID to avoid Docker adding prefixes
+	imageID := config.AgentImage
+	images, err := m.cli.ImageList(ctx, image.ListOptions{})
+	if err == nil {
+		for _, img := range images {
+			for _, tag := range img.RepoTags {
+				if tag == config.AgentImage {
+					imageID = img.ID
+					fmt.Printf("Found local image %s with ID %s\n", config.AgentImage, imageID)
+					break
+				}
+			}
+		}
+	}
+
 	// Port binding
 	port := nat.Port(fmt.Sprintf("%d/tcp", config.ListenPort))
 	portBindings := nat.PortMap{
 		port: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", config.ListenPort)}},
 	}
 
-	// Container config - use image name as-is, Docker will find it
+	// Container config - use image ID to avoid registry lookup
 	containerConfig := &container.Config{
-		Image: config.AgentImage,
+		Image: imageID,
 		Env: []string{
 			fmt.Sprintf("AGENT_ID=%s", config.AgentID),
 			fmt.Sprintf("PORTAL_URL=%s", config.PortalURL),
@@ -77,7 +93,7 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		return "", fmt.Errorf("failed to create container with image '%s': %w", config.AgentImage, err)
 	}
 
-	fmt.Printf("Created container %s with image %s\n", resp.ID[:12], config.AgentImage)
+	fmt.Printf("Created container %s with image %s\n", resp.ID[:12], imageID)
 	return resp.ID, nil
 }
 
