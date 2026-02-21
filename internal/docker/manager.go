@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -37,11 +38,18 @@ type ContainerConfig struct {
 // CreateContainer creates a new Docker container for an agent
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
 	// Check if image exists locally
-	_, _, err := m.cli.ImageInspectWithRaw(ctx, config.AgentImage)
+	imageData, _, err := m.cli.ImageInspectWithRaw(ctx, config.AgentImage)
 	if err != nil {
-		// Image doesn't exist locally
-		return "", fmt.Errorf("image '%s' not found locally. Please build or pull the image first: docker pull %s", config.AgentImage, config.AgentImage)
+		// Try to list all images to help debug
+		images, _ := m.cli.ImageList(ctx, image.ListOptions{})
+		var availableImages []string
+		for _, img := range images {
+			availableImages = append(availableImages, img.RepoTags...)
+		}
+		return "", fmt.Errorf("image '%s' not found locally. Available images: %v. Error: %w", config.AgentImage, availableImages, err)
 	}
+
+	fmt.Printf("Using image: %s (ID: %s)\n", config.AgentImage, imageData.ID)
 
 	containerName := fmt.Sprintf("bot-portal-agent-%s", config.AgentID)
 
