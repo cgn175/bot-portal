@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/models"
+	"github.com/zeroclaw/bot-portal/internal/store"
 )
 
 // ============================================================================
@@ -159,6 +160,10 @@ func (r *Router) updateModel(w http.ResponseWriter, req *http.Request, modelID s
 	model.UpdatedAt = time.Now()
 
 	if err := r.modelStore.Update(model); err != nil {
+		if err == store.ErrNotFound {
+			http.Error(w, "Model not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -169,6 +174,10 @@ func (r *Router) updateModel(w http.ResponseWriter, req *http.Request, modelID s
 
 func (r *Router) deleteModel(w http.ResponseWriter, req *http.Request, modelID string) {
 	if err := r.modelStore.Delete(modelID); err != nil {
+		if err == store.ErrNotFound {
+			http.Error(w, "Model not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

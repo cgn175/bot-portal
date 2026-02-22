@@ -139,7 +139,7 @@ func (s *ModelStore) Update(model *models.Model) error {
 		SET name = ?, provider = ?, model_identifier = ?, endpoint_url = ?, default_params = ?, updated_at = ?
 		WHERE id = ?
 	`
-	_, err := s.db.Exec(query,
+	result, err := s.db.Exec(query,
 		model.Name,
 		model.Provider,
 		model.ModelIdentifier,
@@ -151,15 +151,35 @@ func (s *ModelStore) Update(model *models.Model) error {
 	if err != nil {
 		return fmt.Errorf("failed to update model: %w", err)
 	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
 	return nil
 }
 
 // Delete removes a model from the database
 func (s *ModelStore) Delete(id string) error {
 	query := `DELETE FROM models WHERE id = ?`
-	_, err := s.db.Exec(query, id)
+	result, err := s.db.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete model: %w", err)
 	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
 	return nil
 }

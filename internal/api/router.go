@@ -611,17 +611,19 @@ func (r *Router) restartAgent(w http.ResponseWriter, req *http.Request, agentID 
 	}
 
 	r.agentStore.UpdateStatus(agentID, "restarting")
-	
+
 	// Perform restart asynchronously
-	go func() {
+	// Capture values to avoid race condition with the agent pointer
+	containerID := agent.ContainerID
+	go func(cid, aid string) {
 		ctx := context.Background()
-		if err := r.dockerMgr.RestartContainer(ctx, agent.ContainerID); err != nil {
-			log.Printf("Failed to restart container %s: %v", agent.ContainerID, err)
-			r.agentStore.UpdateStatus(agentID, "stopped")
+		if err := r.dockerMgr.RestartContainer(ctx, cid); err != nil {
+			log.Printf("Failed to restart container %s: %v", cid, err)
+			r.agentStore.UpdateStatus(aid, "stopped")
 			return
 		}
-		r.agentStore.UpdateStatus(agentID, "running")
-	}()
+		r.agentStore.UpdateStatus(aid, "running")
+	}(containerID, agentID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
