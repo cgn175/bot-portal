@@ -5,12 +5,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/zeroclaw/bot-portal/internal/models"
 	"github.com/zeroclaw/bot-portal/internal/store"
 )
+
+func TestMain(m *testing.M) {
+	// Set up test encryption key before running tests (must be exactly 32 bytes)
+	os.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
+	code := m.Run()
+	os.Exit(code)
+}
 
 func TestAuthConfigsAPI(t *testing.T) {
 	// Setup test database using store package
@@ -180,6 +188,72 @@ func TestAuthConfigsAPI(t *testing.T) {
 
 		if rr.Code != http.StatusNotFound {
 			t.Errorf("Expected status 404 for deleted auth config, got %d", rr.Code)
+		}
+	})
+
+	// Test POST /api/auth-configs with duplicate ID returns 409 Conflict
+	t.Run("POST /api/auth-configs duplicate ID returns 409", func(t *testing.T) {
+		// First create a config
+		config := map[string]interface{}{
+			"id":          "duplicate-test-config",
+			"name":        "Test Auth Config",
+			"provider":    "openai",
+			"authType":    "bearer_token",
+			"credentials": map[string]string{
+				"api_key": "sk-test-secret-key",
+			},
+			"endpointUrl": "https://api.openai.com/v1",
+		}
+
+		body, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth-configs", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		router.handleAuthConfigs(rr, req)
+
+		if rr.Code != http.StatusCreated {
+			t.Errorf("Expected status 201 for first create, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		// Try to create again with same ID
+		req = httptest.NewRequest(http.MethodPost, "/api/auth-configs", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr = httptest.NewRecorder()
+		router.handleAuthConfigs(rr, req)
+
+		if rr.Code != http.StatusConflict {
+			t.Errorf("Expected status 409 for duplicate ID, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	// Test GET /api/auth-configs/{id} not found returns 404
+	t.Run("GET /api/auth-configs/{id} not found returns 404", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/auth-configs/non-existent-id", nil)
+		rr := httptest.NewRecorder()
+		router.handleAuthConfigDetail(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status 404 for non-existent config, got %d", rr.Code)
+		}
+	})
+
+	// Test PUT /api/auth-configs/{id} not found returns 404
+	t.Run("PUT /api/auth-configs/{id} not found returns 404", func(t *testing.T) {
+		updates := map[string]interface{}{
+			"name": "Updated Name",
+		}
+
+		body, _ := json.Marshal(updates)
+		req := httptest.NewRequest(http.MethodPut, "/api/auth-configs/non-existent-id", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		router.handleAuthConfigDetail(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("Expected status 404 for non-existent config, got %d", rr.Code)
 		}
 	})
 }

@@ -488,15 +488,17 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 				// Parse temperature and max_tokens from default_params JSON
 				if model.DefaultParams != "" {
 					var params map[string]interface{}
-					if err := json.Unmarshal([]byte(model.DefaultParams), &params); err == nil {
-						if temp, ok := params["temperature"].(float64); ok {
-							modelConfig.Temperature = &temp
-						}
-						// Handle max_tokens as float64 (JSON numbers are float64 by default)
-						if maxTokensFloat, ok := params["max_tokens"].(float64); ok {
-							maxTokens := int(maxTokensFloat)
-							modelConfig.MaxTokens = &maxTokens
-						}
+					if err := json.Unmarshal([]byte(model.DefaultParams), &params); err != nil {
+						http.Error(w, fmt.Sprintf("Failed to parse model default params: %v", err), http.StatusInternalServerError)
+						return
+					}
+					if temp, ok := params["temperature"].(float64); ok {
+						modelConfig.Temperature = &temp
+					}
+					// Handle max_tokens as float64 (JSON numbers are float64 by default)
+					if maxTokensFloat, ok := params["max_tokens"].(float64); ok {
+						maxTokens := int(maxTokensFloat)
+						modelConfig.MaxTokens = &maxTokens
 					}
 				}
 				containerConfig.ModelConfig = modelConfig
@@ -518,10 +520,12 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 				// Parse api_key from credentials JSON
 				if auth.Credentials != "" {
 					var creds map[string]string
-					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err == nil {
-						if apiKey, ok := creds["api_key"]; ok {
-							authConfig.ApiKey = apiKey
-						}
+					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err != nil {
+						http.Error(w, fmt.Sprintf("Failed to parse auth credentials: %v", err), http.StatusInternalServerError)
+						return
+					}
+					if apiKey, ok := creds["api_key"]; ok {
+						authConfig.ApiKey = apiKey
 					}
 				}
 				containerConfig.AuthConfig = authConfig
@@ -802,8 +806,12 @@ func (r *Router) getTask(id string) (*a2a.Task, error) {
 		CreatedAt: taskLog.CreatedAt,
 		UpdatedAt: taskLog.UpdatedAt,
 	}
-	json.Unmarshal(taskLog.Messages, &task.Messages)
-	json.Unmarshal(taskLog.Artifacts, &task.Artifacts)
+	if err := json.Unmarshal(taskLog.Messages, &task.Messages); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal task messages: %w", err)
+	}
+	if err := json.Unmarshal(taskLog.Artifacts, &task.Artifacts); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal task artifacts: %w", err)
+	}
 
 	return task, nil
 }

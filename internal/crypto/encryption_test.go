@@ -2,9 +2,17 @@ package crypto
 
 import (
 	"encoding/base64"
+	"os"
 	"reflect"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	// Set up test encryption key before running tests (must be exactly 32 bytes)
+	os.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
+	code := m.Run()
+	os.Exit(code)
+}
 
 func TestEncryptDecryptCredentials(t *testing.T) {
 	// Sample credentials to test with
@@ -39,6 +47,52 @@ func TestEncryptDecryptCredentials(t *testing.T) {
 	// Verify decrypted data matches original
 	if !reflect.DeepEqual(credentials, decrypted) {
 		t.Errorf("Decrypted credentials don't match original.\nExpected: %v\nGot: %v", credentials, decrypted)
+	}
+}
+
+func TestEncryptionKeyValidation(t *testing.T) {
+	// Save the original key
+	originalKey := os.Getenv("ENCRYPTION_KEY")
+	defer os.Setenv("ENCRYPTION_KEY", originalKey)
+
+	tests := []struct {
+		name      string
+		key       string
+		wantError bool
+	}{
+		{
+			name:      "missing key",
+			key:       "",
+			wantError: true,
+		},
+		{
+			name:      "key too short",
+			key:       "short-key",
+			wantError: true,
+		},
+		{
+			name:      "key too long",
+			key:       "this-key-is-way-too-long-for-aes-256-encryption",
+			wantError: true,
+		},
+		{
+			name:      "key exactly 32 bytes",
+			key:       "0123456789abcdef0123456789abcdef",
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("ENCRYPTION_KEY", tt.key)
+			_, err := EncryptCredentials(map[string]string{"test": "value"})
+			if tt.wantError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.wantError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
 	}
 }
 

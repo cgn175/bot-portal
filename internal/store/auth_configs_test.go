@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,13 @@ import (
 	"github.com/zeroclaw/bot-portal/internal/models"
 	"github.com/google/uuid"
 )
+
+func TestMain(m *testing.M) {
+	// Set up test encryption key before running tests (must be exactly 32 bytes)
+	os.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
+	code := m.Run()
+	os.Exit(code)
+}
 
 func setupAuthConfigTestDB(t *testing.T) *sql.DB {
 	db, err := NewSQLite(":memory:")
@@ -255,9 +263,12 @@ func TestAuthConfigStore_Delete(t *testing.T) {
 		t.Fatalf("failed to delete auth config: %v", err)
 	}
 
-	// Verify it's deleted
-	_, err = store.GetByID(authConfig.ID)
-	if err == nil {
-		t.Error("expected error when getting deleted auth config")
+	// Verify it's deleted (GetByID returns nil, nil for not found)
+	retrieved, err := store.GetByID(authConfig.ID)
+	if err != nil {
+		t.Errorf("unexpected error when getting deleted auth config: %v", err)
+	}
+	if retrieved != nil {
+		t.Error("expected nil when getting deleted auth config")
 	}
 }

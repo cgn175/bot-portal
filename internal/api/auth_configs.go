@@ -2,10 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/models"
+	"github.com/zeroclaw/bot-portal/internal/store"
 )
 
 // ============================================================================
@@ -112,6 +115,11 @@ func (r *Router) createAuthConfig(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if err := r.authConfigStore.Create(config); err != nil {
+		// Check for duplicate ID error
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") || strings.Contains(err.Error(), "already exists") {
+			http.Error(w, "Auth config with this ID already exists", http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -127,7 +135,11 @@ func (r *Router) createAuthConfig(w http.ResponseWriter, req *http.Request) {
 func (r *Router) getAuthConfig(w http.ResponseWriter, req *http.Request, configID string) {
 	config, err := r.authConfigStore.GetByID(configID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if config == nil {
+		http.Error(w, "Auth config not found", http.StatusNotFound)
 		return
 	}
 
@@ -141,7 +153,11 @@ func (r *Router) getAuthConfig(w http.ResponseWriter, req *http.Request, configI
 func (r *Router) updateAuthConfig(w http.ResponseWriter, req *http.Request, configID string) {
 	config, err := r.authConfigStore.GetByID(configID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if config == nil {
+		http.Error(w, "Auth config not found", http.StatusNotFound)
 		return
 	}
 
@@ -183,6 +199,11 @@ func (r *Router) updateAuthConfig(w http.ResponseWriter, req *http.Request, conf
 	config.UpdatedAt = time.Now()
 
 	if err := r.authConfigStore.Update(config); err != nil {
+		// Check for not found error
+		if errors.Is(err, store.ErrNotFound) || strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -196,7 +217,12 @@ func (r *Router) updateAuthConfig(w http.ResponseWriter, req *http.Request, conf
 
 func (r *Router) deleteAuthConfig(w http.ResponseWriter, req *http.Request, configID string) {
 	if err := r.authConfigStore.Delete(configID); err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		// Check for not found error
+		if errors.Is(err, store.ErrNotFound) || strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

@@ -10,22 +10,19 @@ import (
 	"os"
 )
 
-// getKey returns the encryption key from environment or a default 32-byte key for AES-256
-func getKey() []byte {
-	if key := os.Getenv("ENCRYPTION_KEY"); key != "" {
-		// If provided key is shorter than 32 bytes, pad with zeros
-		// If longer, truncate to 32 bytes
-		keyBytes := []byte(key)
-		if len(keyBytes) < 32 {
-			padded := make([]byte, 32)
-			copy(padded, keyBytes)
-			return padded
-		}
-		return keyBytes[:32]
+// getKey returns the encryption key from environment
+func getKey() ([]byte, error) {
+	key := os.Getenv("ENCRYPTION_KEY")
+	if key == "" {
+		return nil, fmt.Errorf("ENCRYPTION_KEY environment variable not set")
 	}
 
-	// Default 32-byte key for AES-256 (in production, this should be randomly generated and stored securely)
-	return []byte("default-encryption-key-32-bytes!")
+	keyBytes := []byte(key)
+	if len(keyBytes) != 32 {
+		return nil, fmt.Errorf("ENCRYPTION_KEY must be exactly 32 bytes for AES-256, got %d bytes", len(keyBytes))
+	}
+
+	return keyBytes, nil
 }
 
 // EncryptCredentials encrypts a map of credentials using AES-256-GCM and returns base64 encoded string
@@ -37,7 +34,10 @@ func EncryptCredentials(creds map[string]string) (string, error) {
 	}
 
 	// Create AES cipher
-	key := getKey()
+	key, err := getKey()
+	if err != nil {
+		return "", err
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("failed to create cipher: %w", err)
@@ -74,7 +74,10 @@ func DecryptCredentials(encrypted string) (map[string]string, error) {
 	}
 
 	// Create AES cipher
-	key := getKey()
+	key, err := getKey()
+	if err != nil {
+		return nil, err
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)

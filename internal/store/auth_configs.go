@@ -3,12 +3,16 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/crypto"
 	"github.com/zeroclaw/bot-portal/internal/models"
 )
+
+// ErrNotFound is returned when a record is not found in the database
+var ErrNotFound = errors.New("record not found")
 
 // AuthConfigStore provides database operations for authentication configurations
 type AuthConfigStore struct {
@@ -60,7 +64,7 @@ func (s *AuthConfigStore) GetByID(id string) (*models.AuthConfig, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("auth config not found with id: %s", id)
+			return nil, nil // Return nil for not found, consistent with other stores
 		}
 		return nil, fmt.Errorf("failed to get auth config: %w", err)
 	}
@@ -216,7 +220,7 @@ func (s *AuthConfigStore) Update(config *models.AuthConfig) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("auth config not found with id: %s", config.ID)
+		return ErrNotFound
 	}
 
 	return nil
@@ -237,7 +241,7 @@ func (s *AuthConfigStore) Delete(id string) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("auth config not found with id: %s", id)
+		return ErrNotFound
 	}
 
 	return nil
