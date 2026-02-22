@@ -143,6 +143,22 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 		if config.AuthConfig.ApiKey != "" {
 			envVars = append(envVars, fmt.Sprintf("API_KEY=%s", config.AuthConfig.ApiKey))
 		}
+
+		// Inject provider-specific API key environment variables
+		switch config.AuthConfig.Type {
+		case "github_copilot", "github_copilot_oauth":
+			if config.AuthConfig.ApiKey != "" {
+				envVars = append(envVars, fmt.Sprintf("COPILOT_API_KEY=%s", config.AuthConfig.ApiKey))
+			}
+		case "anthropic":
+			if config.AuthConfig.ApiKey != "" {
+				envVars = append(envVars, fmt.Sprintf("ANTHROPIC_API_KEY=%s", config.AuthConfig.ApiKey))
+			}
+		case "openai":
+			if config.AuthConfig.ApiKey != "" {
+				envVars = append(envVars, fmt.Sprintf("OPENAI_API_KEY=%s", config.AuthConfig.ApiKey))
+			}
+		}
 	}
 
 	return envVars

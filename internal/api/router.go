@@ -98,6 +98,10 @@ func (r *Router) Run(addr string) error {
 	mux.HandleFunc("/api/auth-configs", r.handleAuthConfigs)
 	mux.HandleFunc("/api/auth-configs/", r.handleAuthConfigDetail)
 
+	// GitHub Copilot OAuth Device Flow
+	mux.HandleFunc("/api/auth/copilot/device-code", r.handleCopilotDeviceCode)
+	mux.HandleFunc("/api/auth/copilot/token", r.handleCopilotToken)
+
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("OK"))
@@ -517,7 +521,7 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 					Type:     auth.AuthType,
 					Endpoint: auth.EndpointURL,
 				}
-				// Parse api_key from credentials JSON
+				// Parse api_key or access_token from credentials JSON
 				if auth.Credentials != "" {
 					var creds map[string]string
 					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err != nil {
@@ -526,6 +530,12 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 					}
 					if apiKey, ok := creds["api_key"]; ok {
 						authConfig.ApiKey = apiKey
+					}
+					// For GitHub Copilot OAuth, use access_token as the API key
+					if auth.AuthType == "github_copilot_oauth" {
+						if accessToken, ok := creds["access_token"]; ok {
+							authConfig.ApiKey = accessToken
+						}
 					}
 				}
 				containerConfig.AuthConfig = authConfig
