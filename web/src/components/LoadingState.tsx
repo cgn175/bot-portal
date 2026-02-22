@@ -16,6 +16,11 @@ export function LoadingState({ message = 'Loading...', variant = 'spinner' }: Lo
           <span />
         </div>
       )}
+      {variant === 'skeleton' && (
+        <div className="loading-skeleton" aria-hidden="true">
+          <div className="skeleton" style={{ height: '16px', width: '120px' }} />
+        </div>
+      )}
       <span>{message}</span>
     </div>
   )
