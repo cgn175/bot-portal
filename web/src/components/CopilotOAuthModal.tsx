@@ -4,9 +4,8 @@ import Alert from './Alert'
 import { api } from '../api/client'
 
 interface CopilotOAuthModalProps {
-  onSuccess: (token: string) => void
-  onCancel: () => void
-}
+  onSuccess: (configId?: string) => void
+  onCancel: () => void}
 
 export default function CopilotOAuthModal({ onSuccess, onCancel }: CopilotOAuthModalProps) {
   const [deviceCode, setDeviceCode] = useState('')
@@ -80,9 +79,9 @@ export default function CopilotOAuthModal({ onSuccess, onCancel }: CopilotOAuthM
       const response = await api.pollCopilotToken(deviceCode)
 
       if (response) {
-        // Token received!
+        // Token received and saved server-side!
         setStatus('success')
-        onSuccess(response.access_token)
+        onSuccess(response.configId)
         return
       }
 

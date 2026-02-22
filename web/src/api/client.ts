@@ -100,10 +100,11 @@ export interface DeviceCodeResponse {
   interval: number
 }
 
-export interface TokenResponse {
-  access_token: string
-  token_type: string
-  scope: string
+// TokenResult matches the backend response structure
+export interface TokenResult {
+  success: boolean
+  message?: string
+  configId?: string
 }
 
 const API_BASE = '/api'
@@ -311,7 +312,7 @@ class ApiClient {
     return res.json()
   }
 
-  async pollCopilotToken(deviceCode: string): Promise<TokenResponse | null> {
+  async pollCopilotToken(deviceCode: string): Promise<TokenResult | null> {
     const res = await fetch(`${API_BASE}/auth/copilot/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

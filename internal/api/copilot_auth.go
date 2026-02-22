@@ -63,10 +63,9 @@ type TokenRequest struct {
 
 // TokenResult represents the result of the token polling
 type TokenResult struct {
-	Success     bool   `json:"success"`
-	Message     string `json:"message,omitempty"`
-	ConfigID    string `json:"configId,omitempty"`
-	AccessToken string `json:"access_token,omitempty"`
+	Success  bool   `json:"success"`
+	Message  string `json:"message,omitempty"`
+	ConfigID string `json:"configId,omitempty"`
 }
 
 // ============================================================================
@@ -227,11 +226,11 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Return success response
+	// Note: The full token is stored server-side in AuthConfig, we don't return it
 	result := TokenResult{
-		Success:     true,
-		Message:     "GitHub Copilot OAuth token saved successfully",
-		ConfigID:    configID,
-		AccessToken: tokenResp.AccessToken[:10] + "...", // Only return partial token for security
+		Success:  true,
+		Message:  "Token saved successfully",
+		ConfigID: configID,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

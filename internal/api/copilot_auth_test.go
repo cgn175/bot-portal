@@ -256,11 +256,12 @@ func TestDeviceCodeResultStructure(t *testing.T) {
 
 func TestTokenResultStructure(t *testing.T) {
 	// Test that our result structures are properly defined
+	// Note: TokenResult no longer includes AccessToken for security
+	// The token is stored server-side in AuthConfig
 	result := TokenResult{
-		Success:     true,
-		Message:     "Token saved",
-		ConfigID:    "test-config",
-		AccessToken: "gho_xxxx...",
+		Success:  true,
+		Message:  "Token saved successfully",
+		ConfigID: "test-config",
 	}
 
 	data, err := json.Marshal(result)
@@ -281,8 +282,5 @@ func TestTokenResultStructure(t *testing.T) {
 	}
 	if decoded.ConfigID != result.ConfigID {
 		t.Errorf("Expected ConfigID %s, got %s", result.ConfigID, decoded.ConfigID)
-	}
-	if decoded.AccessToken != result.AccessToken {
-		t.Errorf("Expected AccessToken %s, got %s", result.AccessToken, decoded.AccessToken)
 	}
 }

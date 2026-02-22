@@ -111,6 +111,20 @@ type A2APeer struct {
 }
 
 // buildEnvironmentVars builds the environment variables for a container
+//
+// SECURITY NOTE: This function injects API keys directly into environment variables.
+// This is a known security limitation as environment variables are visible in:
+//   - `docker inspect` output
+//   - Process listings (`ps e`)
+//   - Container logs
+//   - /proc filesystem on the host
+//
+// For production deployments, consider using Docker secrets or mounted files instead:
+//   https://docs.docker.com/engine/swarm/secrets/
+//   https://docs.docker.com/compose/use-secrets/
+//
+// The proper fix would require architectural changes to support secret injection
+// via files (e.g., /run/secrets/API_KEY) instead of environment variables.
 func buildEnvironmentVars(config ContainerConfig) []string {
 	var envVars []string
 

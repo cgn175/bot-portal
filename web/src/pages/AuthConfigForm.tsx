@@ -99,12 +99,13 @@ export default function AuthConfigForm({ config, onSuccess, onCancel }: AuthConf
     }
   }
 
-  const handleCopilotSuccess = useCallback((token: string) => {
-    setFormData(prev => ({
-      ...prev,
-      credentials: { access_token: token }
-    }))
+  const handleCopilotSuccess = useCallback(() => {
+    // The token has been saved server-side in AuthConfig
+    // We don't receive the token itself anymore for security reasons
+    // Close the modal and let the user save the form
     setShowCopilotModal(false)
+    // Optionally show a success message that the OAuth flow completed
+    alert('GitHub Copilot authentication successful! Click Save to store the configuration.')
   }, [])
 
   const updateCredential = (key: string, value: string) => {
