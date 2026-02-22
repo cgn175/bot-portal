@@ -73,6 +73,22 @@ func resolveDockerContextHost() string {
 	return ""
 }
 
+// ModelConfig holds model configuration for environment variable injection
+type ModelConfig struct {
+	Provider    string
+	Name        string
+	Endpoint    string
+	Temperature *float64
+	MaxTokens   *int
+}
+
+// AuthConfig holds auth configuration for environment variable injection
+type AuthConfig struct {
+	Type     string
+	ApiKey   string
+	Endpoint string
+}
+
 // ContainerConfig holds configuration for creating a container
 type ContainerConfig struct {
 	AgentID      string
@@ -83,6 +99,8 @@ type ContainerConfig struct {
 	A2APeersJSON string
 	AgentName    string
 	AgentDesc    string
+	ModelConfig  *ModelConfig
+	AuthConfig   *AuthConfig
 }
 
 // A2APeer holds peer info for config generation
@@ -90,6 +108,44 @@ type A2APeer struct {
 	ID          string `json:"id"`
 	Endpoint    string `json:"endpoint"`
 	BearerToken string `json:"bearer_token"`
+}
+
+// buildEnvironmentVars builds the environment variables for a container
+func buildEnvironmentVars(config ContainerConfig) []string {
+	var envVars []string
+
+	// Always include base environment variables
+	envVars = append(envVars, fmt.Sprintf("AGENT_ID=%s", config.AgentID))
+	envVars = append(envVars, fmt.Sprintf("PORTAL_URL=%s", config.PortalURL))
+	envVars = append(envVars, fmt.Sprintf("PORTAL_BEARER_TOKEN=%s", config.PortalToken))
+
+	// Add model configuration if present
+	if config.ModelConfig != nil {
+		envVars = append(envVars, fmt.Sprintf("MODEL_PROVIDER=%s", config.ModelConfig.Provider))
+		envVars = append(envVars, fmt.Sprintf("MODEL_NAME=%s", config.ModelConfig.Name))
+		if config.ModelConfig.Endpoint != "" {
+			envVars = append(envVars, fmt.Sprintf("MODEL_ENDPOINT=%s", config.ModelConfig.Endpoint))
+		}
+		if config.ModelConfig.Temperature != nil {
+			envVars = append(envVars, fmt.Sprintf("MODEL_TEMPERATURE=%.2f", *config.ModelConfig.Temperature))
+		}
+		if config.ModelConfig.MaxTokens != nil {
+			envVars = append(envVars, fmt.Sprintf("MODEL_MAX_TOKENS=%d", *config.ModelConfig.MaxTokens))
+		}
+	}
+
+	// Add auth configuration if present
+	if config.AuthConfig != nil {
+		envVars = append(envVars, fmt.Sprintf("AUTH_TYPE=%s", config.AuthConfig.Type))
+		if config.AuthConfig.Endpoint != "" {
+			envVars = append(envVars, fmt.Sprintf("AUTH_ENDPOINT=%s", config.AuthConfig.Endpoint))
+		}
+		if config.AuthConfig.ApiKey != "" {
+			envVars = append(envVars, fmt.Sprintf("API_KEY=%s", config.AuthConfig.ApiKey))
+		}
+	}
+
+	return envVars
 }
 
 var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "/zeroclaw-data/workspace"
@@ -194,15 +250,14 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		containerPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", config.ListenPort)}},
 	}
 
+	// Build environment variables
+	envVars := buildEnvironmentVars(config)
+	envVars = append(envVars, fmt.Sprintf("ZEROCLAW_GATEWAY_PORT=%s", gatewayPort))
+
 	// Container config - use image ID to avoid registry lookup
 	containerConfig := &container.Config{
-		Image: imageID,
-		Env: []string{
-			fmt.Sprintf("AGENT_ID=%s", config.AgentID),
-			fmt.Sprintf("PORTAL_URL=%s", config.PortalURL),
-			fmt.Sprintf("PORTAL_TOKEN=%s", config.PortalToken),
-			fmt.Sprintf("ZEROCLAW_GATEWAY_PORT=%s", gatewayPort),
-		},
+		Image:        imageID,
+		Env:          envVars,
 		ExposedPorts: nat.PortSet{containerPort: struct{}{}},
 	}
 

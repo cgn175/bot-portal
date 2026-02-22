@@ -463,13 +463,72 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 
 	// Create container if it doesn't exist
 	if agent.ContainerID == "" {
-		containerID, err := r.dockerMgr.CreateContainer(ctx, docker.ContainerConfig{
+		// Build container config
+		containerConfig := docker.ContainerConfig{
 			AgentID:     agent.ID,
 			AgentImage:  agent.Image,
 			PortalURL:   fmt.Sprintf("http://localhost:%d", 8080),
 			PortalToken: agent.BearerToken,
 			ListenPort:  listenPort,
-		})
+		}
+
+		// Fetch model config if specified
+		if agent.ModelID != "" {
+			model, err := r.modelStore.GetByID(agent.ModelID)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to fetch model config: %v", err), http.StatusInternalServerError)
+				return
+			}
+			if model != nil {
+				modelConfig := &docker.ModelConfig{
+					Provider: model.Provider,
+					Name:     model.ModelIdentifier,
+					Endpoint: model.EndpointURL,
+				}
+				// Parse temperature and max_tokens from default_params JSON
+				if model.DefaultParams != "" {
+					var params map[string]interface{}
+					if err := json.Unmarshal([]byte(model.DefaultParams), &params); err == nil {
+						if temp, ok := params["temperature"].(float64); ok {
+							modelConfig.Temperature = &temp
+						}
+						// Handle max_tokens as float64 (JSON numbers are float64 by default)
+						if maxTokensFloat, ok := params["max_tokens"].(float64); ok {
+							maxTokens := int(maxTokensFloat)
+							modelConfig.MaxTokens = &maxTokens
+						}
+					}
+				}
+				containerConfig.ModelConfig = modelConfig
+			}
+		}
+
+		// Fetch auth config if specified
+		if agent.AuthConfigID != "" {
+			auth, err := r.authConfigStore.GetByID(agent.AuthConfigID)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to fetch auth config: %v", err), http.StatusInternalServerError)
+				return
+			}
+			if auth != nil {
+				authConfig := &docker.AuthConfig{
+					Type:     auth.AuthType,
+					Endpoint: auth.EndpointURL,
+				}
+				// Parse api_key from credentials JSON
+				if auth.Credentials != "" {
+					var creds map[string]string
+					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err == nil {
+						if apiKey, ok := creds["api_key"]; ok {
+							authConfig.ApiKey = apiKey
+						}
+					}
+				}
+				containerConfig.AuthConfig = authConfig
+			}
+		}
+
+		containerID, err := r.dockerMgr.CreateContainer(ctx, containerConfig)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create container: %v", err), http.StatusInternalServerError)
 			return
