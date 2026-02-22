@@ -20,12 +20,14 @@ import (
 
 // Router is the main HTTP router
 type Router struct {
-	db           *sql.DB
-	dockerMgr    *docker.Manager
-	agentStore   *store.AgentStore
-	channelStore *store.ChannelStore
-	messageStore *store.MessageStore
-	a2aRouter    *a2a.Router
+	db                *sql.DB
+	dockerMgr         *docker.Manager
+	agentStore        *store.AgentStore
+	channelStore      *store.ChannelStore
+	messageStore      *store.MessageStore
+	modelStore        *store.ModelStore
+	authConfigStore   *store.AuthConfigStore
+	a2aRouter         *a2a.Router
 }
 
 // NewRouter creates a new API router
@@ -33,13 +35,17 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	agentStore := store.NewAgentStore(db)
 	channelStore := store.NewChannelStore(db)
 	messageStore := store.NewMessageStore(db)
+	modelStore := store.NewModelStore(db)
+	authConfigStore := store.NewAuthConfigStore(db)
 
 	router := &Router{
-		db:           db,
-		dockerMgr:    dockerMgr,
-		agentStore:   agentStore,
-		channelStore: channelStore,
-		messageStore: messageStore,
+		db:              db,
+		dockerMgr:       dockerMgr,
+		agentStore:      agentStore,
+		channelStore:    channelStore,
+		messageStore:    messageStore,
+		modelStore:      modelStore,
+		authConfigStore: authConfigStore,
 	}
 
 	// Initialize A2A router
@@ -83,6 +89,14 @@ func (r *Router) Run(addr string) error {
 
 	// Messages
 	mux.HandleFunc("/api/messages/stream", r.handleMessageStream)
+
+	// Model management
+	mux.HandleFunc("/api/models", r.handleModels)
+	mux.HandleFunc("/api/models/", r.handleModelDetail)
+
+	// Auth Config management (placeholder for task 7)
+	mux.HandleFunc("/api/auth-configs", r.handleAuthConfigs)
+	mux.HandleFunc("/api/auth-configs/", r.handleAuthConfigDetail)
 
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
