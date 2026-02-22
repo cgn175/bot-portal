@@ -7,20 +7,46 @@ import (
 
 // Agent represents a registered AI agent
 type Agent struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Image       string            `json:"image"`
-	AgentType   string            `json:"agentType"` // "docker" or "native"
-	Status      string            `json:"status"`
-	ContainerID string            `json:"containerId"`
-	Endpoint    string            `json:"endpoint"`
-	ListenPort  int               `json:"listenPort"`
-	BearerToken string            `json:"-"`
-	AgentCard   *AgentCard        `json:"agentCard"`
-	Config      map[string]string `json:"config"`
-	CreatedAt   time.Time         `json:"createdAt"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Description  string            `json:"description"`
+	Image        string            `json:"image"`
+	AgentType    string            `json:"agentType"` // "docker" or "native"
+	Status       string            `json:"status"`
+	ContainerID  string            `json:"containerId"`
+	Endpoint     string            `json:"endpoint"`
+	ListenPort   int               `json:"listenPort"`
+	BearerToken  string            `json:"-"`
+	AgentCard    *AgentCard        `json:"agentCard"`
+	Config       map[string]string `json:"config"`
+	ModelID      *string           `json:"modelId,omitempty"`
+	AuthConfigID *string           `json:"authConfigId,omitempty"`
+	CreatedAt    time.Time         `json:"createdAt"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
+}
+
+// Model represents an AI model configuration
+type Model struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Provider        string    `json:"provider"`
+	ModelIdentifier string    `json:"modelIdentifier"`
+	EndpointURL     string    `json:"endpointUrl,omitempty"`
+	DefaultParams   string    `json:"defaultParams,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
+// AuthConfig represents authentication configuration
+type AuthConfig struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Provider    string    `json:"provider"`
+	AuthType    string    `json:"authType"`
+	Credentials string    `json:"credentials"`
+	EndpointURL string    `json:"endpointUrl,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // AgentCard represents Google A2A AgentCard

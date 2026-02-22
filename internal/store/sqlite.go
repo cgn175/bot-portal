@@ -57,6 +57,26 @@ func RunMigrations(db *sql.DB) error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS models (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			provider TEXT NOT NULL,
+			model_identifier TEXT NOT NULL,
+			endpoint_url TEXT,
+			default_params TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS auth_configs (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			provider TEXT NOT NULL,
+			auth_type TEXT NOT NULL,
+			credentials TEXT,
+			endpoint_url TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_channel_id ON task_logs(channel_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_sender_id ON task_logs(sender_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at)`,
@@ -68,11 +88,21 @@ func RunMigrations(db *sql.DB) error {
 		}
 	}
 
-	// Check if agent_type column exists, add if not
-	var count int
-	err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('agents') WHERE name='agent_type'`).Scan(&count)
-	if err == nil && count == 0 {
-		_, _ = db.Exec(`ALTER TABLE agents ADD COLUMN agent_type TEXT DEFAULT 'docker'`)
+	// Add missing columns to existing tables
+	alterMigrations := []struct {
+		table, column, definition string
+	}{
+		{"agents", "agent_type", "TEXT DEFAULT 'docker'"},
+		{"agents", "listen_port", "INTEGER DEFAULT 9000"},
+		{"agents", "model_id", "TEXT"},
+		{"agents", "auth_config_id", "TEXT"},
+	}
+	for _, m := range alterMigrations {
+		var count int
+		err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, m.table, m.column).Scan(&count)
+		if err == nil && count == 0 {
+			_, _ = db.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, m.table, m.column, m.definition))
+		}
 	}
 
 	return nil

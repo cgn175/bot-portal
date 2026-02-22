@@ -11,20 +11,22 @@ import (
 
 // Agent represents a registered AI agent
 type Agent struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Image       string          `json:"image"`
-	AgentType   string          `json:"agentType"`
-	Status      string          `json:"status"`
-	ContainerID string          `json:"containerId"`
-	Endpoint    string          `json:"endpoint"`
-	ListenPort  int             `json:"listenPort"`
-	BearerToken string          `json:"-"`
-	AgentCard   json.RawMessage `json:"agentCard"`
-	Config      json.RawMessage `json:"config"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Image        string          `json:"image"`
+	AgentType    string          `json:"agentType"`
+	Status       string          `json:"status"`
+	ContainerID  string          `json:"containerId"`
+	Endpoint     string          `json:"endpoint"`
+	ListenPort   int             `json:"listenPort"`
+	BearerToken  string          `json:"-"`
+	AgentCard    json.RawMessage `json:"agentCard"`
+	Config       json.RawMessage `json:"config"`
+	ModelID      string          `json:"modelId"`
+	AuthConfigID string          `json:"authConfigId"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	UpdatedAt    time.Time       `json:"updatedAt"`
 }
 
 // AgentStore handles agent persistence
@@ -47,11 +49,11 @@ func (s *AgentStore) Create(agent *Agent) error {
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO agents (id, name, description, image, agent_type, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO agents (id, name, description, image, agent_type, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		agent.ID, agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status,
 		agent.ContainerID, agent.Endpoint, agent.ListenPort, agent.BearerToken,
-		agentCardJSON, configJSON, agent.CreatedAt, agent.UpdatedAt)
+		agentCardJSON, configJSON, agent.ModelID, agent.AuthConfigID, agent.CreatedAt, agent.UpdatedAt)
 	return err
 }
 
@@ -61,11 +63,11 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 	var agentCardJSON, configJSON []byte
 
 	err := s.db.QueryRow(`
-		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at
+		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, created_at, updated_at
 		FROM agents WHERE id = ?`, id).Scan(
 		&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 		&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
-		&agentCardJSON, &configJSON, &agent.CreatedAt, &agent.UpdatedAt)
+		&agentCardJSON, &configJSON, &agent.ModelID, &agent.AuthConfigID, &agent.CreatedAt, &agent.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -91,7 +93,7 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 // List retrieves all agents
 func (s *AgentStore) List() ([]*Agent, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, created_at, updated_at
+		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, created_at, updated_at
 		FROM agents`)
 	if err != nil {
 		return nil, err
@@ -106,7 +108,7 @@ func (s *AgentStore) List() ([]*Agent, error) {
 		err := rows.Scan(
 			&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 			&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
-			&agentCardJSON, &configJSON, &agent.CreatedAt, &agent.UpdatedAt)
+			&agentCardJSON, &configJSON, &agent.ModelID, &agent.AuthConfigID, &agent.CreatedAt, &agent.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -135,11 +137,11 @@ func (s *AgentStore) Update(agent *Agent) error {
 	configJSON, _ := json.Marshal(agent.Config)
 
 	_, err := s.db.Exec(`
-		UPDATE agents SET name = ?, description = ?, image = ?, agent_type = ?, status = ?, container_id = ?, endpoint = ?, listen_port = ?, bearer_token = ?, agent_card = ?, config = ?, updated_at = ?
+		UPDATE agents SET name = ?, description = ?, image = ?, agent_type = ?, status = ?, container_id = ?, endpoint = ?, listen_port = ?, bearer_token = ?, agent_card = ?, config = ?, model_id = ?, auth_config_id = ?, updated_at = ?
 		WHERE id = ?`,
 		agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status, agent.ContainerID,
 		agent.Endpoint, agent.ListenPort, agent.BearerToken, agentCardJSON, configJSON,
-		agent.UpdatedAt, agent.ID)
+		agent.ModelID, agent.AuthConfigID, agent.UpdatedAt, agent.ID)
 	return err
 }
 

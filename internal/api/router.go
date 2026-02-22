@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
@@ -18,12 +20,14 @@ import (
 
 // Router is the main HTTP router
 type Router struct {
-	db           *sql.DB
-	dockerMgr    *docker.Manager
-	agentStore   *store.AgentStore
-	channelStore *store.ChannelStore
-	messageStore *store.MessageStore
-	a2aRouter    *a2a.Router
+	db                *sql.DB
+	dockerMgr         *docker.Manager
+	agentStore        *store.AgentStore
+	channelStore      *store.ChannelStore
+	messageStore      *store.MessageStore
+	modelStore        *store.ModelStore
+	authConfigStore   *store.AuthConfigStore
+	a2aRouter         *a2a.Router
 }
 
 // NewRouter creates a new API router
@@ -31,13 +35,17 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	agentStore := store.NewAgentStore(db)
 	channelStore := store.NewChannelStore(db)
 	messageStore := store.NewMessageStore(db)
+	modelStore := store.NewModelStore(db)
+	authConfigStore := store.NewAuthConfigStore(db)
 
 	router := &Router{
-		db:           db,
-		dockerMgr:    dockerMgr,
-		agentStore:   agentStore,
-		channelStore: channelStore,
-		messageStore: messageStore,
+		db:              db,
+		dockerMgr:       dockerMgr,
+		agentStore:      agentStore,
+		channelStore:    channelStore,
+		messageStore:    messageStore,
+		modelStore:      modelStore,
+		authConfigStore: authConfigStore,
 	}
 
 	// Initialize A2A router
@@ -81,6 +89,14 @@ func (r *Router) Run(addr string) error {
 
 	// Messages
 	mux.HandleFunc("/api/messages/stream", r.handleMessageStream)
+
+	// Model management
+	mux.HandleFunc("/api/models", r.handleModels)
+	mux.HandleFunc("/api/models/", r.handleModelDetail)
+
+	// Auth Config management (placeholder for task 7)
+	mux.HandleFunc("/api/auth-configs", r.handleAuthConfigs)
+	mux.HandleFunc("/api/auth-configs/", r.handleAuthConfigDetail)
 
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
@@ -293,6 +309,16 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 		status = "running"
 	}
 
+	// Extract listen port from the endpoint URL for Docker agents
+	listenPort := 0
+	if agent.AgentType == "docker" && agent.Endpoint != "" {
+		if u, err := url.Parse(agent.Endpoint); err == nil {
+			if p := u.Port(); p != "" {
+				listenPort, _ = strconv.Atoi(p)
+			}
+		}
+	}
+
 	newAgent := &store.Agent{
 		ID:          agent.ID,
 		Name:        agent.Name,
@@ -301,6 +327,7 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 		AgentType:   agent.AgentType,
 		Endpoint:    agent.Endpoint,
 		Status:      status,
+		ListenPort:  listenPort,
 		BearerToken: token,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -351,6 +378,33 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 	if desc, ok := updates["description"].(string); ok {
 		agent.Description = desc
 	}
+	needsNewContainer := false
+	if img, ok := updates["image"].(string); ok && img != agent.Image {
+		agent.Image = img
+		needsNewContainer = true
+	}
+	if ep, ok := updates["endpoint"].(string); ok && ep != agent.Endpoint {
+		agent.Endpoint = ep
+		needsNewContainer = true
+		// Re-derive listen port from the new endpoint
+		if u, err := url.Parse(ep); err == nil {
+			if p := u.Port(); p != "" {
+				agent.ListenPort, _ = strconv.Atoi(p)
+			}
+		}
+	}
+
+	// Remove stale container so startAgent creates a fresh one
+	if needsNewContainer && agent.ContainerID != "" {
+		ctx := req.Context()
+		r.dockerMgr.StopContainer(ctx, agent.ContainerID)
+		r.dockerMgr.RemoveContainer(ctx, agent.ContainerID)
+		agent.ContainerID = ""
+		agent.Status = "stopped"
+	}
+	if at, ok := updates["agentType"].(string); ok {
+		agent.AgentType = at
+	}
 
 	if err := r.agentStore.Update(agent); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -395,15 +449,90 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 
 	ctx := req.Context()
 
+	// Resolve listen port from endpoint if not already set
+	listenPort := agent.ListenPort
+	if listenPort == 0 && agent.Endpoint != "" {
+		if u, err := url.Parse(agent.Endpoint); err == nil {
+			if p := u.Port(); p != "" {
+				listenPort, _ = strconv.Atoi(p)
+				agent.ListenPort = listenPort
+				r.agentStore.Update(agent)
+			}
+		}
+	}
+
 	// Create container if it doesn't exist
 	if agent.ContainerID == "" {
-		containerID, err := r.dockerMgr.CreateContainer(ctx, docker.ContainerConfig{
+		// Build container config
+		containerConfig := docker.ContainerConfig{
 			AgentID:     agent.ID,
 			AgentImage:  agent.Image,
 			PortalURL:   fmt.Sprintf("http://localhost:%d", 8080),
 			PortalToken: agent.BearerToken,
-			ListenPort:  agent.ListenPort,
-		})
+			ListenPort:  listenPort,
+		}
+
+		// Fetch model config if specified
+		if agent.ModelID != "" {
+			model, err := r.modelStore.GetByID(agent.ModelID)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to fetch model config: %v", err), http.StatusInternalServerError)
+				return
+			}
+			if model != nil {
+				modelConfig := &docker.ModelConfig{
+					Provider: model.Provider,
+					Name:     model.ModelIdentifier,
+					Endpoint: model.EndpointURL,
+				}
+				// Parse temperature and max_tokens from default_params JSON
+				if model.DefaultParams != "" {
+					var params map[string]interface{}
+					if err := json.Unmarshal([]byte(model.DefaultParams), &params); err != nil {
+						http.Error(w, fmt.Sprintf("Failed to parse model default params: %v", err), http.StatusInternalServerError)
+						return
+					}
+					if temp, ok := params["temperature"].(float64); ok {
+						modelConfig.Temperature = &temp
+					}
+					// Handle max_tokens as float64 (JSON numbers are float64 by default)
+					if maxTokensFloat, ok := params["max_tokens"].(float64); ok {
+						maxTokens := int(maxTokensFloat)
+						modelConfig.MaxTokens = &maxTokens
+					}
+				}
+				containerConfig.ModelConfig = modelConfig
+			}
+		}
+
+		// Fetch auth config if specified
+		if agent.AuthConfigID != "" {
+			auth, err := r.authConfigStore.GetByID(agent.AuthConfigID)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to fetch auth config: %v", err), http.StatusInternalServerError)
+				return
+			}
+			if auth != nil {
+				authConfig := &docker.AuthConfig{
+					Type:     auth.AuthType,
+					Endpoint: auth.EndpointURL,
+				}
+				// Parse api_key from credentials JSON
+				if auth.Credentials != "" {
+					var creds map[string]string
+					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err != nil {
+						http.Error(w, fmt.Sprintf("Failed to parse auth credentials: %v", err), http.StatusInternalServerError)
+						return
+					}
+					if apiKey, ok := creds["api_key"]; ok {
+						authConfig.ApiKey = apiKey
+					}
+				}
+				containerConfig.AuthConfig = authConfig
+			}
+		}
+
+		containerID, err := r.dockerMgr.CreateContainer(ctx, containerConfig)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create container: %v", err), http.StatusInternalServerError)
 			return
@@ -482,17 +611,19 @@ func (r *Router) restartAgent(w http.ResponseWriter, req *http.Request, agentID 
 	}
 
 	r.agentStore.UpdateStatus(agentID, "restarting")
-	
+
 	// Perform restart asynchronously
-	go func() {
+	// Capture values to avoid race condition with the agent pointer
+	containerID := agent.ContainerID
+	go func(cid, aid string) {
 		ctx := context.Background()
-		if err := r.dockerMgr.RestartContainer(ctx, agent.ContainerID); err != nil {
-			log.Printf("Failed to restart container %s: %v", agent.ContainerID, err)
-			r.agentStore.UpdateStatus(agentID, "stopped")
+		if err := r.dockerMgr.RestartContainer(ctx, cid); err != nil {
+			log.Printf("Failed to restart container %s: %v", cid, err)
+			r.agentStore.UpdateStatus(aid, "stopped")
 			return
 		}
-		r.agentStore.UpdateStatus(agentID, "running")
-	}()
+		r.agentStore.UpdateStatus(aid, "running")
+	}(containerID, agentID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
@@ -677,8 +808,12 @@ func (r *Router) getTask(id string) (*a2a.Task, error) {
 		CreatedAt: taskLog.CreatedAt,
 		UpdatedAt: taskLog.UpdatedAt,
 	}
-	json.Unmarshal(taskLog.Messages, &task.Messages)
-	json.Unmarshal(taskLog.Artifacts, &task.Artifacts)
+	if err := json.Unmarshal(taskLog.Messages, &task.Messages); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal task messages: %w", err)
+	}
+	if err := json.Unmarshal(taskLog.Artifacts, &task.Artifacts); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal task artifacts: %w", err)
+	}
 
 	return task, nil
 }
@@ -713,3 +848,5 @@ func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {
 
 	return result, nil
 }
+
+
