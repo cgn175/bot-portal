@@ -1,13 +1,17 @@
 import { useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAgents } from '../contexts/AgentContext'
 import { api } from '../api/client'
 import AgentForm from '../components/AgentForm'
+import Alert from '../components/Alert'
+import StatusBadge from '../components/StatusBadge'
+import { LoadingState } from '../components/LoadingState'
+import EmptyState from '../components/EmptyState'
 
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { agents, refreshAgents } = useAgents()
+  const { agents, loading, refreshAgents } = useAgents()
   const agent = agents.find(a => a.id === id)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -23,6 +27,7 @@ export default function AgentDetail() {
       else await api.restartAgent(id)
       setSuccess(`Agent ${action}ed successfully`)
       setTimeout(refreshAgents, 1000)
+      setTimeout(() => setSuccess(''), 5000)
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action} agent`)
     }
@@ -53,62 +58,84 @@ export default function AgentDetail() {
     refreshAgents()
   }, [refreshAgents])
 
+  if (loading && !agent) {
+    return <LoadingState message="Loading agent details..." />
+  }
+
   if (!agent) {
     return (
-      <div className="card">
-        <h2>Agent not found</h2>
-        <button className="btn btn-primary" onClick={() => navigate('/')}>
-          Back to Dashboard
-        </button>
-      </div>
+      <EmptyState
+        icon="🔍"
+        title="Agent not found"
+        description="The agent you're looking for doesn't exist or has been removed."
+        action={
+          <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+            Back to Dashboard
+          </Link>
+        }
+      />
     )
   }
 
+  const isDocker = agent.agentType === 'docker'
+
   return (
     <div>
-      <button className="btn btn-secondary" onClick={() => navigate('/')} style={{ marginBottom: '1.5rem' }}>
-        ← Back to Dashboard
-      </button>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <Link
+          to="/"
+          className="btn btn-ghost"
+          style={{ textDecoration: 'none', paddingLeft: 0 }}
+        >
+          ← Back to Dashboard
+        </Link>
+      </div>
 
-      {error && <div className="error-message">{error}</div>}
-      {success && <div className="success-message">{success}</div>}
+      {error && (
+        <Alert type="error" onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
+
+      {success && (
+        <Alert type="success" onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      )}
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1.5rem' }}>
+        <div className="card-header" style={{ marginBottom: '1.5rem' }}>
           <div>
-            <h2 style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '0.5rem' }}>
+            <h2 style={{ fontSize: 'var(--font-size-3xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: '0.75rem' }}>
               {agent.name}
             </h2>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <span className={`badge ${agent.status}`}>{agent.status}</span>
-              <span className="badge" style={{ background: agent.agentType === 'docker' ? 'var(--color-primary)' : 'var(--color-warning)' }}>
-                {agent.agentType}
-              </span>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <StatusBadge status={agent.status} />
+              <StatusBadge status={agent.agentType} />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button className="btn btn-secondary" onClick={() => setShowEditForm(true)}>
               Edit
             </button>
-            {agent.agentType === 'docker' && (
+
+            {isDocker && agent.status === 'stopped' && (
+              <button className="btn btn-primary" onClick={() => handleAction('start')}>
+                Start
+              </button>
+            )}
+
+            {isDocker && agent.status === 'running' && (
               <>
-                {agent.status === 'stopped' && (
-                  <button className="btn btn-primary" onClick={() => handleAction('start')}>
-                    Start
-                  </button>
-                )}
-                {agent.status === 'running' && (
-                  <>
-                    <button className="btn btn-secondary" onClick={() => handleAction('restart')}>
-                      Restart
-                    </button>
-                    <button className="btn btn-secondary" onClick={() => handleAction('stop')}>
-                      Stop
-                    </button>
-                  </>
-                )}
+                <button className="btn btn-secondary" onClick={() => handleAction('restart')}>
+                  Restart
+                </button>
+                <button className="btn btn-secondary" onClick={() => handleAction('stop')}>
+                  Stop
+                </button>
               </>
             )}
+
             <button className="btn btn-danger" onClick={handleDelete}>
               Delete
             </button>
@@ -121,52 +148,30 @@ export default function AgentDetail() {
           </p>
         )}
 
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
-              Agent Type
-            </label>
-            <div>
-              <span className="badge" style={{ background: agent.agentType === 'docker' ? 'var(--color-primary)' : 'var(--color-warning)' }}>
-                {agent.agentType === 'docker' ? 'Docker Container' : 'Native Process'}
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
-              Agent ID
-            </label>
-            <code style={{ display: 'block', padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
-              {agent.id}
-            </code>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
-              Endpoint
-            </label>
-            <code style={{ display: 'block', padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
-              {agent.endpoint}
-            </code>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
-              Docker Image
-            </label>
-            <code style={{ display: 'block', padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
-              {agent.image || 'N/A'}
-            </code>
-          </div>
+        <div style={{ display: 'grid', gap: '1.25rem' }}>
+          <InfoRow label="Agent ID" value={<code>{agent.id}</code>} />
+          <InfoRow label="Agent Type" value={<StatusBadge status={agent.agentType} />} />
+          <InfoRow label="Endpoint" value={<code>{agent.endpoint}</code>} />
+          <InfoRow label="Docker Image" value={<code>{agent.image || 'N/A'}</code>} />
 
           {agent.bearer_token && (
             <div>
-              <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+              <label style={labelStyle}>
                 Bearer Token
               </label>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <code style={{ flex: 1, padding: '0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <code
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem 1rem',
+                    background: 'var(--color-bg)',
+                    borderRadius: 'var(--radius-md)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    border: '1px solid var(--color-border)'
+                  }}
+                >
                   {agent.bearer_token}
                 </code>
                 <button className="btn btn-secondary" onClick={copyToken}>
@@ -177,31 +182,43 @@ export default function AgentDetail() {
           )}
 
           {agent.created_at && (
-            <div>
-              <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
-                Created
-              </label>
-              <div style={{ color: 'var(--color-text-muted)' }}>
-                {new Date(agent.created_at).toLocaleString()}
-              </div>
-            </div>
+            <InfoRow
+              label="Created"
+              value={
+                <span style={{ color: 'var(--color-text-muted)' }}>
+                  {new Date(agent.created_at).toLocaleString()}
+                </span>
+              }
+            />
+          )}
+
+          {agent.updated_at && (
+            <InfoRow
+              label="Last Updated"
+              value={
+                <span style={{ color: 'var(--color-text-muted)' }}>
+                  {new Date(agent.updated_at).toLocaleString()}
+                </span>
+              }
+            />
           )}
         </div>
       </div>
 
       <div className="card">
-        <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>
+        <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-semibold)', marginBottom: '1rem' }}>
           Quick Actions
         </h3>
         <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <Link
+            to="/messages"
+            className="btn btn-secondary"
+            style={{ textDecoration: 'none', justifyContent: 'flex-start' }}
+          >
+            📨 View Messages
+          </Link>
           <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}>
-            View Messages
-          </button>
-          <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}>
-            View Channels
-          </button>
-          <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}>
-            Test Connection
+            🔗 Test Connection
           </button>
         </div>
       </div>
@@ -213,6 +230,28 @@ export default function AgentDetail() {
           onCancel={() => setShowEditForm(false)}
         />
       )}
+    </div>
+  )
+}
+
+const labelStyle = {
+  display: 'block',
+  fontWeight: 'var(--font-weight-medium)',
+  marginBottom: '0.5rem',
+  color: 'var(--color-text-secondary)',
+  fontSize: 'var(--font-size-sm)'
+}
+
+interface InfoRowProps {
+  label: string
+  value: React.ReactNode
+}
+
+function InfoRow({ label, value }: InfoRowProps) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <div>{value}</div>
     </div>
   )
 }

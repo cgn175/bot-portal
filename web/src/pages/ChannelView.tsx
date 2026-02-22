@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { api, Channel, TaskLog } from '../api/client'
+import Alert from '../components/Alert'
+import StatusBadge from '../components/StatusBadge'
+import { LoadingState } from '../components/LoadingState'
+import EmptyState from '../components/EmptyState'
 
 export default function ChannelView() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const [channel, setChannel] = useState<Channel | null>(null)
   const [messages, setMessages] = useState<TaskLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,7 +37,7 @@ export default function ChannelView() {
 
     // Use SSE for real-time message updates
     const eventSource = api.streamMessages(id)
-    
+
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
@@ -56,39 +59,61 @@ export default function ChannelView() {
   }, [id])
 
   if (loading && !channel) {
-    return <div className="loading">Loading channel...</div>
+    return <LoadingState message="Loading channel..." />
   }
 
   if (!channel) {
     return (
-      <div className="card">
-        <h2>Channel not found</h2>
-        <button className="btn btn-primary" onClick={() => navigate('/messages')}>
-          Back to Messages
-        </button>
-      </div>
+      <EmptyState
+        icon="🔍"
+        title="Channel not found"
+        description="The channel you're looking for doesn't exist or has been removed."
+        action={
+          <Link to="/messages" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+            Back to Messages
+          </Link>
+        }
+      />
     )
   }
 
   return (
     <div>
-      <button className="btn btn-secondary" onClick={() => navigate('/messages')} style={{ marginBottom: '1.5rem' }}>
-        ← Back to Messages
-      </button>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <Link
+          to="/messages"
+          className="btn btn-ghost"
+          style={{ textDecoration: 'none', paddingLeft: 0 }}
+        >
+          ← Back to Messages
+        </Link>
+      </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && (
+        <Alert type="error" onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '1rem' }}>
+        <h2 style={{ fontSize: 'var(--font-size-3xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: '1rem' }}>
           {channel.id}
         </h2>
         <div>
-          <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
+          <label style={labelStyle}>
             Members
           </label>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {channel.members.map(member => (
-              <code key={member} style={{ padding: '0.5rem 0.75rem', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius)' }}>
+              <code
+                key={member}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  background: 'var(--color-bg)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)'
+                }}
+              >
                 {member}
               </code>
             ))}
@@ -96,56 +121,111 @@ export default function ChannelView() {
         </div>
       </div>
 
-      <h3 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1rem' }}>
-        Messages ({messages.length})
-      </h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-semibold)' }}>
+          Messages
+        </h3>
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+          {messages.length} message{messages.length !== 1 ? 's' : ''}
+        </span>
+      </div>
 
       {messages.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: 'var(--color-text-muted)' }}>
-            No messages in this channel yet
-          </p>
-        </div>
+        <EmptyState
+          icon="📭"
+          title="No messages yet"
+          description="This channel doesn't have any messages yet. Messages will appear here when agents communicate."
+        />
       ) : (
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          {messages.map(msg => (
-            <div key={msg.id} className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.75rem' }}>
-                <div>
-                  <span className={`badge ${msg.status}`}>{msg.status}</span>
-                  <span className={`badge ${msg.direction}`} style={{ marginLeft: '0.5rem' }}>
-                    {msg.direction}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                  {new Date(msg.created_at).toLocaleString()}
-                </div>
-              </div>
+        <div className="grid" style={{ gap: '1rem' }}>
+          {messages.map((msg, index) => (
+            <MessageCard key={msg.id} message={msg} index={index} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-              <div style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-                <code>{msg.sender_id}</code>
-                <span style={{ margin: '0 0.5rem', color: 'var(--color-text-muted)' }}>→</span>
-                <code>{msg.recipient_id || 'broadcast'}</code>
-              </div>
+interface MessageCardProps {
+  message: TaskLog
+  index: number
+}
 
-              {msg.messages && msg.messages.length > 0 && (
-                <div style={{ background: 'var(--color-bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius)', fontSize: '0.875rem' }}>
-                  {msg.messages.map((m, i) => (
-                    <div key={i} style={{ marginBottom: i < msg.messages!.length - 1 ? '0.75rem' : 0 }}>
-                      <div style={{ fontWeight: '600', color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
-                        {m.role}
-                      </div>
-                      <div style={{ color: 'var(--color-text)' }}>
-                        {m.content}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+function MessageCard({ message, index }: MessageCardProps) {
+  return (
+    <div
+      className="card animate-fade-in"
+      style={{ animationDelay: `${index * 0.05}s` }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <StatusBadge status={message.status} />
+          <StatusBadge status={message.direction} />
+        </div>
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+          {new Date(message.created_at).toLocaleString()}
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontSize: 'var(--font-size-sm)',
+          marginBottom: '0.75rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          flexWrap: 'wrap'
+        }}
+      >
+        <code>{message.sender_id}</code>
+        <span style={{ color: 'var(--color-text-muted)' }}>→</span>
+        <code>{message.recipient_id || 'broadcast'}</code>
+      </div>
+
+      {message.messages && message.messages.length > 0 && (
+        <div
+          style={{
+            background: 'var(--color-bg)',
+            padding: '1rem',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 'var(--font-size-sm)',
+            border: '1px solid var(--color-border)'
+          }}
+        >
+          {message.messages.map((m, i) => (
+            <div
+              key={i}
+              style={{
+                marginBottom: i < message.messages!.length - 1 ? '0.75rem' : 0,
+                paddingBottom: i < message.messages!.length - 1 ? '0.75rem' : 0,
+                borderBottom: i < message.messages!.length - 1 ? '1px solid var(--color-border)' : 'none'
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: '0.25rem',
+                  fontSize: 'var(--font-size-xs)',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {m.role}
+              </div>
+              <div style={{ color: 'var(--color-text)' }}>{m.content}</div>
             </div>
           ))}
         </div>
       )}
     </div>
   )
+}
+
+const labelStyle = {
+  display: 'block',
+  fontWeight: 'var(--font-weight-medium)',
+  marginBottom: '0.5rem',
+  color: 'var(--color-text-secondary)',
+  fontSize: 'var(--font-size-sm)'
 }
