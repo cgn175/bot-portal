@@ -209,3 +209,38 @@ bot-portal-wzv (Epic)
 - Portal acts as A2A registry - agents discover each other through it
 - Bearer token auth for A2A communication
 - SSE for real-time updates throughout the system
+
+---
+
+## Phase 7: Model & Auth Configs UI and Provider Integrations
+
+### Task 7.1: Advanced Auth Providers (Backend)
+- Add backend support for **GitHub Copilot Device Flow** (similar to zeroclaw's implementation):
+  - `POST /api/auth/copilot/device-code` - Initiates flow, returns `device_code`, `user_code`, `verification_uri`.
+  - `POST /api/auth/copilot/token` - Polls the token endpoint using the device code and saves the generated token as an encrypted Auth Config.
+- Ensure `internal/docker/manager.go` injects the correct generic or specific provider environment variables (`API_KEY`, `ANTHROPIC_API_KEY`, `COPILOT_API_KEY`, etc.) based on the related Model Provider and Auth Config Type.
+
+### Task 7.2: Models Management UI
+- Create `/models` route in React app.
+- **Model List**: Table showing `ID`, `Name`, `Provider`, `Identifier`.
+- **Model Form**: Create/Edit form requiring:
+  - `ID`: Unique identifier
+  - `Name`: Human-readable name
+  - `Provider`: Dropdown (OpenAI, Anthropic, Gemini, Copilot, Ollama, OpenRouter, etc.)
+  - `Model Identifier`: E.g., `gpt-4o`, `claude-3-5-sonnet`
+  - `Endpoint URL`: Optional override for compatible proxies
+  - `Default Params`: JSON editor for `temperature`, `max_tokens`
+
+### Task 7.3: Auth Configs Management UI
+- Create `/auth-configs` route.
+- **Auth Config List**: Table showing `ID`, `Name`, `Type`. Passwords/keys themselves remain masked/hidden.
+- **Auth Config Form**: Create/Edit form requiring:
+  - `ID`
+  - `Name`
+  - `Auth Type`: Dropdown (`Bearer Token`, `Basic Auth`, `GitHub Copilot OAuth`, etc.)
+- **Dynamic Auth UIs**:
+  - *Standard Providers (Bearer)*: Show an `API Key` password input, stored as `{"api_key": "..."}`.
+  - *GitHub Copilot OAuth*: 
+    - Show an "Authenticate with GitHub" button.
+    - Modal opens with instructions, the `user_code`, and a link to `github.com/login/device`.
+    - Modal polls backend until token is successfully retrieved and saved.

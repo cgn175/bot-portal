@@ -1079,3 +1079,79 @@ pre code {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-bg-elevated);
 }
+
+/* ========================================
+   TABLES
+   ======================================== */
+
+.table-container {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-4) var(--space-6);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table th {
+  background: var(--color-bg-tertiary);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.05em;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tr:hover td {
+  background: var(--color-bg-tertiary);
+}
+
+.data-table code {
+  font-size: 0.85em;
+  padding: var(--space-1) var(--space-2);
+}
+
+.action-buttons {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ========================================
+   CREDENTIAL FIELDS
+   ======================================== */
+
+.credential-field,
+.credential-fields-stack {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.credential-fields-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.credential-fields-stack input {
+  margin-bottom: var(--space-3);
+}
+
+.credential-fields-stack input:last-of-type {
+  margin-bottom: 0;
+}

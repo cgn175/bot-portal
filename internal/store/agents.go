@@ -53,7 +53,10 @@ func (s *AgentStore) Create(agent *Agent) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		agent.ID, agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status,
 		agent.ContainerID, agent.Endpoint, agent.ListenPort, agent.BearerToken,
-		agentCardJSON, configJSON, agent.ModelID, agent.AuthConfigID, agent.CreatedAt, agent.UpdatedAt)
+		agentCardJSON, configJSON,
+		sql.NullString{String: agent.ModelID, Valid: agent.ModelID != ""},
+		sql.NullString{String: agent.AuthConfigID, Valid: agent.AuthConfigID != ""},
+		agent.CreatedAt, agent.UpdatedAt)
 	return err
 }
 
@@ -61,13 +64,14 @@ func (s *AgentStore) Create(agent *Agent) error {
 func (s *AgentStore) GetByID(id string) (*Agent, error) {
 	var agent Agent
 	var agentCardJSON, configJSON []byte
+	var modelID, authConfigID sql.NullString
 
 	err := s.db.QueryRow(`
 		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, created_at, updated_at
 		FROM agents WHERE id = ?`, id).Scan(
 		&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 		&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
-		&agentCardJSON, &configJSON, &agent.ModelID, &agent.AuthConfigID, &agent.CreatedAt, &agent.UpdatedAt)
+		&agentCardJSON, &configJSON, &modelID, &authConfigID, &agent.CreatedAt, &agent.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -75,6 +79,9 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	agent.ModelID = modelID.String
+	agent.AuthConfigID = authConfigID.String
 
 	if len(agentCardJSON) > 0 {
 		if err := json.Unmarshal(agentCardJSON, &agent.AgentCard); err != nil {
@@ -104,14 +111,18 @@ func (s *AgentStore) List() ([]*Agent, error) {
 	for rows.Next() {
 		var agent Agent
 		var agentCardJSON, configJSON []byte
+		var modelID, authConfigID sql.NullString
 
 		err := rows.Scan(
 			&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 			&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
-			&agentCardJSON, &configJSON, &agent.ModelID, &agent.AuthConfigID, &agent.CreatedAt, &agent.UpdatedAt)
+			&agentCardJSON, &configJSON, &modelID, &authConfigID, &agent.CreatedAt, &agent.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
+
+		agent.ModelID = modelID.String
+		agent.AuthConfigID = authConfigID.String
 
 		if len(agentCardJSON) > 0 {
 			if err := json.Unmarshal(agentCardJSON, &agent.AgentCard); err != nil {
@@ -141,7 +152,9 @@ func (s *AgentStore) Update(agent *Agent) error {
 		WHERE id = ?`,
 		agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status, agent.ContainerID,
 		agent.Endpoint, agent.ListenPort, agent.BearerToken, agentCardJSON, configJSON,
-		agent.ModelID, agent.AuthConfigID, agent.UpdatedAt, agent.ID)
+		sql.NullString{String: agent.ModelID, Valid: agent.ModelID != ""},
+		sql.NullString{String: agent.AuthConfigID, Valid: agent.AuthConfigID != ""},
+		agent.UpdatedAt, agent.ID)
 	return err
 }
 
