@@ -49,6 +49,63 @@ export interface CreateTaskRequest {
   message: Message
 }
 
+// Model types
+export interface Model {
+  id: string
+  name: string
+  provider: string
+  modelIdentifier: string
+  endpointUrl?: string
+  defaultParams?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateModelRequest {
+  id: string
+  name: string
+  provider: string
+  modelName: string
+  baseUrl?: string
+  apiKeyConfig?: Record<string, unknown>
+}
+
+// Auth Config types
+export interface AuthConfig {
+  id: string
+  name: string
+  provider: string
+  authType: 'bearer_token' | 'basic_auth' | 'github_copilot_oauth'
+  credentials: string
+  endpointUrl?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateAuthConfigRequest {
+  id: string
+  name: string
+  provider: string
+  authType: 'bearer_token' | 'basic_auth' | 'github_copilot_oauth'
+  credentials: Record<string, string>
+  endpointUrl?: string
+}
+
+// Copilot OAuth types
+export interface DeviceCodeResponse {
+  device_code: string
+  user_code: string
+  verification_uri: string
+  expires_in: number
+  interval: number
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+  scope: string
+}
+
 const API_BASE = '/api'
 
 class ApiClient {
@@ -147,10 +204,125 @@ class ApiClient {
   }
 
   streamMessages(channelId?: string): EventSource {
-    const url = channelId 
+    const url = channelId
       ? `${API_BASE}/messages/stream?channel_id=${channelId}`
       : `${API_BASE}/messages/stream`
     return new EventSource(url)
+  }
+
+  // ============================================================================
+  // Model Management
+  // ============================================================================
+
+  async listModels(): Promise<Model[]> {
+    const res = await fetch(`${API_BASE}/models`)
+    if (!res.ok) throw new Error('Failed to fetch models')
+    return res.json()
+  }
+
+  async getModel(id: string): Promise<Model> {
+    const res = await fetch(`${API_BASE}/models/${id}`)
+    if (!res.ok) throw new Error('Failed to fetch model')
+    return res.json()
+  }
+
+  async createModel(data: CreateModelRequest): Promise<Model> {
+    const res = await fetch(`${API_BASE}/models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) {
+      const error = await res.text()
+      throw new Error(error || 'Failed to create model')
+    }
+    return res.json()
+  }
+
+  async updateModel(id: string, data: Partial<CreateModelRequest>): Promise<Model> {
+    const res = await fetch(`${API_BASE}/models/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) throw new Error('Failed to update model')
+    return res.json()
+  }
+
+  async deleteModel(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/models/${id}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error('Failed to delete model')
+  }
+
+  // ============================================================================
+  // Auth Config Management
+  // ============================================================================
+
+  async listAuthConfigs(): Promise<AuthConfig[]> {
+    const res = await fetch(`${API_BASE}/auth-configs`)
+    if (!res.ok) throw new Error('Failed to fetch auth configs')
+    return res.json()
+  }
+
+  async getAuthConfig(id: string): Promise<AuthConfig> {
+    const res = await fetch(`${API_BASE}/auth-configs/${id}`)
+    if (!res.ok) throw new Error('Failed to fetch auth config')
+    return res.json()
+  }
+
+  async createAuthConfig(data: CreateAuthConfigRequest): Promise<AuthConfig> {
+    const res = await fetch(`${API_BASE}/auth-configs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) {
+      const error = await res.text()
+      throw new Error(error || 'Failed to create auth config')
+    }
+    return res.json()
+  }
+
+  async updateAuthConfig(id: string, data: Partial<CreateAuthConfigRequest>): Promise<AuthConfig> {
+    const res = await fetch(`${API_BASE}/auth-configs/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!res.ok) throw new Error('Failed to update auth config')
+    return res.json()
+  }
+
+  async deleteAuthConfig(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/auth-configs/${id}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error('Failed to delete auth config')
+  }
+
+  // ============================================================================
+  // GitHub Copilot OAuth Device Flow
+  // ============================================================================
+
+  async initiateCopilotDeviceFlow(): Promise<DeviceCodeResponse> {
+    const res = await fetch(`${API_BASE}/auth/copilot/device-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    if (!res.ok) throw new Error('Failed to initiate device flow')
+    return res.json()
+  }
+
+  async pollCopilotToken(deviceCode: string): Promise<TokenResponse | null> {
+    const res = await fetch(`${API_BASE}/auth/copilot/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_code: deviceCode })
+    })
+    if (res.status === 202) {
+      // Still waiting for user authorization
+      return null
+    }
+    if (!res.ok) throw new Error('Failed to get token')
+    return res.json()
   }
 }
 

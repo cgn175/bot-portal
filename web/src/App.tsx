@@ -5,6 +5,8 @@ import Dashboard from './pages/Dashboard'
 import AgentDetail from './pages/AgentDetail'
 import MessageViewer from './pages/MessageViewer'
 import ChannelView from './pages/ChannelView'
+import Models from './pages/Models'
+import AuthConfigs from './pages/AuthConfigs'
 
 function App() {
   const location = useLocation()
@@ -37,6 +39,20 @@ function App() {
               <span>Agents</span>
             </Link>
             <Link
+              to="/models"
+              className={`nav-link ${isActive('/models') ? 'active' : ''}`}
+              aria-current={isActive('/models') ? 'page' : undefined}
+            >
+              <span>Models</span>
+            </Link>
+            <Link
+              to="/auth-configs"
+              className={`nav-link ${isActive('/auth-configs') ? 'active' : ''}`}
+              aria-current={isActive('/auth-configs') ? 'page' : undefined}
+            >
+              <span>Auth</span>
+            </Link>
+            <Link
               to="/messages"
               className={`nav-link ${isActive('/messages') ? 'active' : ''}`}
               aria-current={isActive('/messages') ? 'page' : undefined}
@@ -51,6 +67,8 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/agents/:id" element={<AgentDetail />} />
+              <Route path="/models" element={<Models />} />
+              <Route path="/auth-configs" element={<AuthConfigs />} />
               <Route path="/messages" element={<MessageViewer />} />
               <Route path="/channels/:id" element={<ChannelView />} />
             </Routes>
