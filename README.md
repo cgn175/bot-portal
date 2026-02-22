@@ -10,6 +10,8 @@ A web portal for managing multiple AI agents running as Docker containers. Serve
 - **Message Logging**: Persistent task logs with full conversation history
 - **Docker Integration**: Automatic container lifecycle management
 - **Bearer Token Auth**: Secure agent-to-agent authentication
+- **Central Model Store**: Manage shared AI model configurations across agents
+- **Authentication Store**: Secure API key and credential management encrypted at rest
 - **REST API**: Full HTTP API for portal management
 - **React Frontend**: Web dashboard for monitoring and control
 
@@ -105,6 +107,50 @@ GET /api/agents/{id}?action=stop
 GET /api/agents/{id}?action=restart
 ```
 
+### Models
+
+```bash
+# List models
+GET /api/models
+
+# Create model
+POST /api/models
+{
+  "id": "gpt-4",
+  "name": "GPT-4",
+  "provider": "openai",
+  "model_identifier": "gpt-4o",
+  "endpoint_url": "https://api.openai.com/v1",
+  "default_params": "{\"temperature\": 0.7}"
+}
+
+# Get, Update, Delete model
+GET /api/models/{id}
+PUT /api/models/{id}
+DELETE /api/models/{id}
+```
+
+### Auth Configs
+
+```bash
+# List auth configs
+GET /api/auth-configs
+
+# Create auth config
+POST /api/auth-configs
+{
+  "id": "openai-key",
+  "name": "OpenAI Primary Key",
+  "auth_type": "bearer",
+  "credentials": "{\"api_key\": \"sk-...\"}"
+}
+
+# Get, Update, Delete auth config
+GET /api/auth-configs/{id}
+PUT /api/auth-configs/{id}
+DELETE /api/auth-configs/{id}
+```
+
 ### A2A Protocol (Google A2A)
 
 ```bash
@@ -173,6 +219,9 @@ PORT=8080
 
 # Docker network
 DOCKER_NETWORK=bot-portal
+
+# Encryption Key (required for Auth Configs, must be exactly 32 bytes)
+ENCRYPTION_KEY=my-secure-32-byte-encryption-key-
 ```
 
 ## Development

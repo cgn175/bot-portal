@@ -116,6 +116,14 @@ Build a web portal to manage multiple zeroclaw AI agents running as Docker conta
 | `/api/channels/:id/messages` | GET | Message history |
 | `/api/messages/stream` | GET (SSE) | Real-time stream |
 
+### Task 4.3: Model & Auth Config Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/models` | GET/POST | Manage centralized model configurations |
+| `/api/models/:id` | GET/PUT/DELETE | Model specific operations |
+| `/api/auth-configs` | GET/POST | Manage encrypted auth credentials |
+| `/api/auth-configs/:id` | GET/PUT/DELETE | Auth config specific operations |
+
 ---
 
 ## Phase 5: Frontend
