@@ -2,7 +2,11 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"text/template"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -16,13 +20,57 @@ type Manager struct {
 	cli *client.Client
 }
 
-// NewManager creates a new Docker manager
+// NewManager creates a new Docker manager.
+// It resolves the active Docker context (e.g., Docker Desktop vs Podman) to
+// connect to the correct daemon, matching the behavior of the Docker CLI.
 func NewManager() (*Manager, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	opts := []client.Opt{client.FromEnv, client.WithAPIVersionNegotiation()}
+
+	// If DOCKER_HOST is not explicitly set, resolve it from the active Docker context.
+	// This prevents connecting to the wrong daemon when multiple runtimes are installed
+	// (e.g., Docker Desktop and Podman both providing /var/run/docker.sock).
+	if os.Getenv("DOCKER_HOST") == "" {
+		if host := resolveDockerContextHost(); host != "" {
+			opts = append(opts, client.WithHost(host))
+		}
+	}
+
+	cli, err := client.NewClientWithOpts(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 	return &Manager{cli: cli}, nil
+}
+
+// resolveDockerContextHost reads ~/.docker/config.json to find the active
+// Docker context and returns its endpoint host. Returns "" if the default
+// context is active or if detection fails.
+func resolveDockerContextHost() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	configPath := filepath.Join(home, ".docker", "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+
+	var config struct {
+		CurrentContext string `json:"currentContext"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil || config.CurrentContext == "" || config.CurrentContext == "default" {
+		return ""
+	}
+
+	// Docker Desktop on macOS uses a well-known socket path
+	socketPath := filepath.Join(home, ".docker", "run", "docker.sock")
+	if _, err := os.Stat(socketPath); err == nil {
+		return "unix://" + socketPath
+	}
+
+	return ""
 }
 
 // ContainerConfig holds configuration for creating a container
@@ -33,6 +81,73 @@ type ContainerConfig struct {
 	PortalToken  string
 	ListenPort   int
 	A2APeersJSON string
+	AgentName    string
+	AgentDesc    string
+}
+
+// A2APeer holds peer info for config generation
+type A2APeer struct {
+	ID          string `json:"id"`
+	Endpoint    string `json:"endpoint"`
+	BearerToken string `json:"bearer_token"`
+}
+
+var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "/zeroclaw-data/workspace"
+config_path = "/zeroclaw-data/.zeroclaw/config.toml"
+
+[gateway]
+port = {{ .GatewayPort }}
+host = "[::]"
+allow_public_bind = true
+
+[channels_config]
+cli = false
+
+[channels_config.a2a]
+enabled = true
+listen_port = {{ .GatewayPort }}
+discovery_mode = "static"
+allowed_peer_ids = ["*"]
+{{ range .Peers }}
+[[channels_config.a2a.peers]]
+id = "{{ .ID }}"
+endpoint = "{{ .Endpoint }}"
+bearer_token = "{{ .BearerToken }}"
+enabled = true
+{{ end }}
+`))
+
+// generateAgentConfig creates a zeroclaw config.toml with A2A enabled
+// and writes it to a temp file, returning the path.
+func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, error) {
+	var peers []A2APeer
+	if config.A2APeersJSON != "" {
+		json.Unmarshal([]byte(config.A2APeersJSON), &peers)
+	}
+
+	data := struct {
+		GatewayPort string
+		Peers       []A2APeer
+	}{
+		GatewayPort: gatewayPort,
+		Peers:       peers,
+	}
+
+	tmpDir := filepath.Join(os.TempDir(), "bot-portal-configs")
+	os.MkdirAll(tmpDir, 0755)
+
+	configPath := filepath.Join(tmpDir, fmt.Sprintf("%s-config.toml", config.AgentID))
+	f, err := os.Create(configPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create config file: %w", err)
+	}
+	defer f.Close()
+
+	if err := agentConfigTmpl.Execute(f, data); err != nil {
+		return "", fmt.Errorf("failed to write config: %w", err)
+	}
+
+	return configPath, nil
 }
 
 // CreateContainer creates a new Docker container for an agent
@@ -54,10 +169,29 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		}
 	}
 
-	// Port binding
-	port := nat.Port(fmt.Sprintf("%d/tcp", config.ListenPort))
+	// Inspect image to find the container's exposed port
+	var containerPort nat.Port
+	inspectResult, _, err := m.cli.ImageInspectWithRaw(ctx, imageID)
+	if err == nil && inspectResult.Config != nil {
+		for p := range inspectResult.Config.ExposedPorts {
+			containerPort = p
+			break
+		}
+	}
+	if containerPort == "" {
+		containerPort = nat.Port(fmt.Sprintf("%d/tcp", config.ListenPort))
+	}
+
+	// Generate agent config with A2A enabled and mount it
+	gatewayPort := containerPort.Port()
+	configPath, err := generateAgentConfig(config, gatewayPort)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate agent config: %w", err)
+	}
+
+	// Map host port (from endpoint URL) to the image's exposed port
 	portBindings := nat.PortMap{
-		port: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", config.ListenPort)}},
+		containerPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", config.ListenPort)}},
 	}
 
 	// Container config - use image ID to avoid registry lookup
@@ -67,18 +201,20 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 			fmt.Sprintf("AGENT_ID=%s", config.AgentID),
 			fmt.Sprintf("PORTAL_URL=%s", config.PortalURL),
 			fmt.Sprintf("PORTAL_TOKEN=%s", config.PortalToken),
-			fmt.Sprintf("LISTEN_PORT=%d", config.ListenPort),
-			fmt.Sprintf("A2A_PEERS=%s", config.A2APeersJSON),
+			fmt.Sprintf("ZEROCLAW_GATEWAY_PORT=%s", gatewayPort),
 		},
-		ExposedPorts: nat.PortSet{port: struct{}{}},
+		ExposedPorts: nat.PortSet{containerPort: struct{}{}},
 	}
 
-	// Host config
+	// Host config with config file bind mount
 	hostConfig := &container.HostConfig{
 		PortBindings:    portBindings,
 		NetworkMode:     "bot-portal",
 		AutoRemove:      false,
 		PublishAllPorts: false,
+		Binds: []string{
+			fmt.Sprintf("%s:/zeroclaw-data/.zeroclaw/config.toml:ro", configPath),
+		},
 	}
 
 	// Network config

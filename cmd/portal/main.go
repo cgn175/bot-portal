@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 
@@ -10,6 +11,10 @@ import (
 )
 
 func main() {
+	// Parse command line flags
+	migrateOnly := flag.Bool("migrate-only", false, "Run migrations only and exit")
+	flag.Parse()
+
 	// Initialize SQLite store
 	db, err := store.NewSQLite("db/portal.db")
 	if err != nil {
@@ -20,6 +25,12 @@ func main() {
 	// Run migrations
 	if err := store.RunMigrations(db); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	// If migration only, exit here
+	if *migrateOnly {
+		log.Println("Migrations completed successfully")
+		return
 	}
 
 	// Initialize Docker manager

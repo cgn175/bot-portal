@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
@@ -293,6 +295,16 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 		status = "running"
 	}
 
+	// Extract listen port from the endpoint URL for Docker agents
+	listenPort := 0
+	if agent.AgentType == "docker" && agent.Endpoint != "" {
+		if u, err := url.Parse(agent.Endpoint); err == nil {
+			if p := u.Port(); p != "" {
+				listenPort, _ = strconv.Atoi(p)
+			}
+		}
+	}
+
 	newAgent := &store.Agent{
 		ID:          agent.ID,
 		Name:        agent.Name,
@@ -301,6 +313,7 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 		AgentType:   agent.AgentType,
 		Endpoint:    agent.Endpoint,
 		Status:      status,
+		ListenPort:  listenPort,
 		BearerToken: token,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -351,6 +364,33 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 	if desc, ok := updates["description"].(string); ok {
 		agent.Description = desc
 	}
+	needsNewContainer := false
+	if img, ok := updates["image"].(string); ok && img != agent.Image {
+		agent.Image = img
+		needsNewContainer = true
+	}
+	if ep, ok := updates["endpoint"].(string); ok && ep != agent.Endpoint {
+		agent.Endpoint = ep
+		needsNewContainer = true
+		// Re-derive listen port from the new endpoint
+		if u, err := url.Parse(ep); err == nil {
+			if p := u.Port(); p != "" {
+				agent.ListenPort, _ = strconv.Atoi(p)
+			}
+		}
+	}
+
+	// Remove stale container so startAgent creates a fresh one
+	if needsNewContainer && agent.ContainerID != "" {
+		ctx := req.Context()
+		r.dockerMgr.StopContainer(ctx, agent.ContainerID)
+		r.dockerMgr.RemoveContainer(ctx, agent.ContainerID)
+		agent.ContainerID = ""
+		agent.Status = "stopped"
+	}
+	if at, ok := updates["agentType"].(string); ok {
+		agent.AgentType = at
+	}
 
 	if err := r.agentStore.Update(agent); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -395,6 +435,18 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 
 	ctx := req.Context()
 
+	// Resolve listen port from endpoint if not already set
+	listenPort := agent.ListenPort
+	if listenPort == 0 && agent.Endpoint != "" {
+		if u, err := url.Parse(agent.Endpoint); err == nil {
+			if p := u.Port(); p != "" {
+				listenPort, _ = strconv.Atoi(p)
+				agent.ListenPort = listenPort
+				r.agentStore.Update(agent)
+			}
+		}
+	}
+
 	// Create container if it doesn't exist
 	if agent.ContainerID == "" {
 		containerID, err := r.dockerMgr.CreateContainer(ctx, docker.ContainerConfig{
@@ -402,7 +454,7 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 			AgentImage:  agent.Image,
 			PortalURL:   fmt.Sprintf("http://localhost:%d", 8080),
 			PortalToken: agent.BearerToken,
-			ListenPort:  agent.ListenPort,
+			ListenPort:  listenPort,
 		})
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create container: %v", err), http.StatusInternalServerError)
@@ -713,3 +765,5 @@ func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {
 
 	return result, nil
 }
+
+
