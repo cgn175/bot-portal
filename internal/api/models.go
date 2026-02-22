@@ -175,12 +175,3 @@ func (r *Router) deleteModel(w http.ResponseWriter, req *http.Request, modelID s
 
 	w.WriteHeader(http.StatusNoContent)
 }
-
-// Placeholder handlers for auth configs (Task 7)
-func (r *Router) handleAuthConfigs(w http.ResponseWriter, req *http.Request) {
-	http.Error(w, "Auth configs endpoints not yet implemented", http.StatusNotImplemented)
-}
-
-func (r *Router) handleAuthConfigDetail(w http.ResponseWriter, req *http.Request) {
-	http.Error(w, "Auth configs endpoints not yet implemented", http.StatusNotImplemented)
-}
