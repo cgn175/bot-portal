@@ -3,6 +3,9 @@ import { useAgents } from '../contexts/AgentContext'
 import { api } from '../api/client'
 import AgentForm from '../components/AgentForm'
 import AgentGrid from '../components/AgentGrid'
+import Alert from '../components/Alert'
+import { SkeletonCard } from '../components/LoadingState'
+import EmptyState from '../components/EmptyState'
 
 export default function Dashboard() {
   const { agents, loading, error, refreshAgents } = useAgents()
@@ -37,30 +40,54 @@ export default function Dashboard() {
   }, [refreshAgents])
 
   if (loading && agents.length === 0) {
-    return <div className="loading">Loading agents...</div>
+    return (
+      <div>
+        <div className="page-header">
+          <h2>Agents</h2>
+        </div>
+        <SkeletonCard count={3} />
+      </div>
+    )
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '2rem', fontWeight: '700' }}>Agents</h2>
+      <div className="page-header">
+        <div>
+          <h2>Agents</h2>
+          <p style={{ color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+            Manage and monitor your AI agents
+          </p>
+        </div>
         <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          + Register Agent
+          <span>+</span>
+          <span>Register Agent</span>
         </button>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
-      {actionError && <div className="error-message">{actionError}</div>}
+      {error && (
+        <Alert type="error" onClose={() => window.location.reload()}>
+          {error}
+        </Alert>
+      )}
+
+      {actionError && (
+        <Alert type="error" onClose={() => setActionError('')}>
+          {actionError}
+        </Alert>
+      )}
 
       {agents.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
-            No agents registered yet
-          </p>
-          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-            Register Your First Agent
-          </button>
-        </div>
+        <EmptyState
+          icon="🤖"
+          title="No agents registered yet"
+          description="Get started by registering your first agent to manage your AI workflows."
+          action={
+            <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+              Register Your First Agent
+            </button>
+          }
+        />
       ) : (
         <AgentGrid agents={agents} onDelete={handleDelete} onAction={handleAction} />
       )}

@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { api, Channel, TaskLog } from '../api/client'
+import Alert from '../components/Alert'
+import StatusBadge from '../components/StatusBadge'
+import { LoadingState } from '../components/LoadingState'
+import EmptyState from '../components/EmptyState'
 
 export default function MessageViewer() {
   const [channels, setChannels] = useState<Channel[]>([])
@@ -44,7 +49,7 @@ export default function MessageViewer() {
 
     // Use SSE for real-time message updates
     const eventSource = api.streamMessages(selectedChannel)
-    
+
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
@@ -67,88 +72,149 @@ export default function MessageViewer() {
 
   return (
     <div>
-      <h2 style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '1.5rem' }}>
-        Messages
-      </h2>
-
-      {error && <div className="error-message">{error}</div>}
-
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
-          Filter by Channel
-        </label>
-        <select 
-          value={selectedChannel} 
-          onChange={e => setSelectedChannel(e.target.value)}
-          style={{ width: '100%', padding: '0.625rem', background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', color: 'var(--color-text)' }}
-        >
-          <option value="">Select a channel...</option>
-          {channels.map(channel => (
-            <option key={channel.id} value={channel.id}>
-              {channel.id} ({channel.members.join(', ')})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {loading && <div className="loading">Loading messages...</div>}
-
-      {!loading && !selectedChannel && (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: 'var(--color-text-muted)' }}>
-            Select a channel to view messages
+      <div className="page-header">
+        <div>
+          <h2>Messages</h2>
+          <p style={{ color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+            View and monitor message flows between agents
           </p>
         </div>
+      </div>
+
+      {error && (
+        <Alert type="error" onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label htmlFor="channel-select">Filter by Channel</label>
+          <select
+            id="channel-select"
+            value={selectedChannel}
+            onChange={e => setSelectedChannel(e.target.value)}
+          >
+            <option value="">Select a channel...</option>
+            {channels.map(channel => (
+              <option key={channel.id} value={channel.id}>
+                {channel.id} ({channel.members.join(', ')})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {loading && selectedChannel && <LoadingState message="Loading messages..." />}
+
+      {!loading && !selectedChannel && (
+        <EmptyState
+          icon="📨"
+          title="Select a channel"
+          description="Choose a channel from the dropdown above to view messages."
+        />
       )}
 
       {!loading && selectedChannel && messages.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: 'var(--color-text-muted)' }}>
-            No messages in this channel yet
-          </p>
-        </div>
+        <EmptyState
+          icon="📭"
+          title="No messages yet"
+          description="This channel doesn't have any messages yet. Messages will appear here when agents communicate."
+        />
       )}
 
       {!loading && messages.length > 0 && (
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          {messages.map(msg => (
-            <div key={msg.id} className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.75rem' }}>
-                <div>
-                  <span className={`badge ${msg.status}`}>{msg.status}</span>
-                  <span className={`badge ${msg.direction}`} style={{ marginLeft: '0.5rem' }}>
-                    {msg.direction}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                  {new Date(msg.created_at).toLocaleString()}
-                </div>
-              </div>
+        <div className="grid" style={{ gap: '1rem' }}>
+          {messages.map((msg, index) => (
+            <MessageCard key={msg.id} message={msg} index={index} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-              <div style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-                <code>{msg.sender_id}</code>
-                <span style={{ margin: '0 0.5rem', color: 'var(--color-text-muted)' }}>→</span>
-                <code>{msg.recipient_id || 'broadcast'}</code>
-              </div>
+interface MessageCardProps {
+  message: TaskLog
+  index: number
+}
 
-              {msg.messages && msg.messages.length > 0 && (
-                <div style={{ background: 'var(--color-bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius)', fontSize: '0.875rem' }}>
-                  {msg.messages.map((m, i) => (
-                    <div key={i} style={{ marginBottom: i < msg.messages!.length - 1 ? '0.75rem' : 0 }}>
-                      <div style={{ fontWeight: '600', color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
-                        {m.role}
-                      </div>
-                      <div style={{ color: 'var(--color-text)' }}>
-                        {m.content}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+function MessageCard({ message, index }: MessageCardProps) {
+  return (
+    <div
+      className="card animate-fade-in"
+      style={{ animationDelay: `${index * 0.05}s` }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <StatusBadge status={message.status} />
+          <StatusBadge status={message.direction} />
+        </div>
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+          {new Date(message.created_at).toLocaleString()}
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontSize: 'var(--font-size-sm)',
+          marginBottom: '0.75rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          flexWrap: 'wrap'
+        }}
+      >
+        <code>{message.sender_id}</code>
+        <span style={{ color: 'var(--color-text-muted)' }}>→</span>
+        <code>{message.recipient_id || 'broadcast'}</code>
+      </div>
+
+      {message.messages && message.messages.length > 0 && (
+        <div
+          style={{
+            background: 'var(--color-bg)',
+            padding: '1rem',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 'var(--font-size-sm)',
+            border: '1px solid var(--color-border)'
+          }}
+        >
+          {message.messages.map((m, i) => (
+            <div
+              key={i}
+              style={{
+                marginBottom: i < message.messages!.length - 1 ? '0.75rem' : 0,
+                paddingBottom: i < message.messages!.length - 1 ? '0.75rem' : 0,
+                borderBottom: i < message.messages!.length - 1 ? '1px solid var(--color-border)' : 'none'
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: '0.25rem',
+                  fontSize: 'var(--font-size-xs)',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {m.role}
+              </div>
+              <div style={{ color: 'var(--color-text)' }}>{m.content}</div>
             </div>
           ))}
         </div>
       )}
+
+      <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+        <Link
+          to={`/channels/${message.channel_id}`}
+          className="btn btn-secondary btn-sm"
+          style={{ textDecoration: 'none' }}
+        >
+          View Channel
+        </Link>
+      </div>
     </div>
   )
 }
