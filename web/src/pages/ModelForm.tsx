@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api, CreateModelRequest, Model } from '../api/client'
+import { api, CreateModelRequest, Model, AuthConfig, CopilotModel } from '../api/client'
 import Modal from '../components/Modal'
 import Alert from '../components/Alert'
 
@@ -8,15 +8,6 @@ interface ModelFormProps {
   onSuccess: () => void
   onCancel: () => void
 }
-
-const PROVIDERS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'gemini', label: 'Gemini' },
-  { value: 'copilot', label: 'Copilot' },
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'openrouter', label: 'OpenRouter' }
-]
 
 const DEFAULT_PARAMS_EXAMPLE = `{
   "temperature": 0.7,
@@ -27,7 +18,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
   const [formData, setFormData] = useState<CreateModelRequest>({
     id: '',
     name: '',
-    provider: 'openai',
+    provider: '',
     modelName: '',
     baseUrl: '',
     apiKeyConfig: {}
@@ -35,6 +26,16 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
   const [defaultParams, setDefaultParams] = useState(DEFAULT_PARAMS_EXAMPLE)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Auth config integration
+  const [authConfigs, setAuthConfigs] = useState<AuthConfig[]>([])
+  const [selectedAuthConfig, setSelectedAuthConfig] = useState('')
+  const [availableModels, setAvailableModels] = useState<CopilotModel[]>([])
+  const [browsing, setBrowsing] = useState(false)
+
+  useEffect(() => {
+    api.listAuthConfigs().then(setAuthConfigs).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (model) {
@@ -56,6 +57,45 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
       }
     }
   }, [model])
+
+  const handleAuthConfigChange = (configId: string) => {
+    setSelectedAuthConfig(configId)
+    setAvailableModels([])
+    if (!configId) return
+
+    const config = authConfigs.find(c => c.id === configId)
+    if (!config) return
+
+    const provider = config.authType === 'github_copilot_oauth' ? 'copilot' : config.provider
+    setFormData(prev => ({
+      ...prev,
+      provider,
+      baseUrl: config.endpointUrl || ''
+    }))
+  }
+
+  const handleBrowseModels = async () => {
+    if (!selectedAuthConfig) return
+    setBrowsing(true)
+    try {
+      const discovered = await api.discoverModels(selectedAuthConfig)
+      setAvailableModels(discovered)
+    } catch {
+      setError('Failed to discover models from this provider')
+    } finally {
+      setBrowsing(false)
+    }
+  }
+
+  const handleSelectModel = (m: CopilotModel) => {
+    setFormData(prev => ({
+      ...prev,
+      id: prev.id || m.id,
+      name: prev.name || m.name || m.id,
+      modelName: m.id
+    }))
+    setAvailableModels([])
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -129,6 +169,87 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
       )}
 
       <form id="model-form" onSubmit={handleSubmit}>
+        {!model && authConfigs.length > 0 && (
+          <div className="form-group">
+            <label htmlFor="authConfig">Auth Provider</label>
+            <select
+              id="authConfig"
+              value={selectedAuthConfig}
+              onChange={e => handleAuthConfigChange(e.target.value)}
+            >
+              <option value="">— Select to auto-fill —</option>
+              {authConfigs.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <small>Select a provider to auto-fill endpoint and discover models</small>
+          </div>
+        )}
+
+        <div className="form-group">
+          <label htmlFor="modelName">Model Identifier *</label>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <input
+              id="modelName"
+              type="text"
+              required
+              value={formData.modelName}
+              onChange={e => setFormData({ ...formData, modelName: e.target.value })}
+              placeholder="gpt-4o"
+              style={{ flex: 1 }}
+            />
+            {selectedAuthConfig && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleBrowseModels}
+                disabled={browsing}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {browsing ? 'Loading...' : 'Browse'}
+              </button>
+            )}
+          </div>
+          {availableModels.length > 0 && (
+            <div style={{
+              marginTop: '0.5rem',
+              maxHeight: '200px',
+              overflowY: 'auto',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--color-bg)'
+            }}>
+              {availableModels.map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleSelectModel(m)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '0.375rem 0.75rem',
+                    background: formData.modelName === m.id ? 'var(--color-primary-subtle)' : 'none',
+                    border: 'none',
+                    borderBottom: '1px solid var(--color-border-subtle)',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text)'
+                  }}
+                  onMouseEnter={e => { if (formData.modelName !== m.id) e.currentTarget.style.background = 'var(--color-bg-secondary)' }}
+                  onMouseLeave={e => { if (formData.modelName !== m.id) e.currentTarget.style.background = 'none' }}
+                >
+                  <code style={{ fontSize: '0.8rem' }}>{m.id}</code>
+                  {m.name && m.name !== m.id && (
+                    <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>— {m.name}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          <small>The actual model identifier used in API calls (e.g., "gpt-4o", "claude-3-5-sonnet")</small>
+        </div>
+
         <div className="form-group">
           <label htmlFor="id">Model ID *</label>
           <input
@@ -139,7 +260,6 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
             onChange={e => setFormData({ ...formData, id: e.target.value })}
             placeholder="gpt-4o"
             disabled={!!model}
-            className={error ? 'error' : ''}
           />
           <small>
             {model ? 'Model ID cannot be changed' : 'Unique identifier (lowercase, no spaces)'}
@@ -161,30 +281,15 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
 
         <div className="form-group">
           <label htmlFor="provider">Provider *</label>
-          <select
+          <input
             id="provider"
+            type="text"
             required
             value={formData.provider}
             onChange={e => setFormData({ ...formData, provider: e.target.value })}
-          >
-            {PROVIDERS.map(p => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-          <small>Select the AI provider for this model</small>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="modelName">Model Identifier *</label>
-          <input
-            id="modelName"
-            type="text"
-            required
-            value={formData.modelName}
-            onChange={e => setFormData({ ...formData, modelName: e.target.value })}
-            placeholder="gpt-4o"
+            placeholder="openai"
           />
-          <small>The actual model identifier used in API calls (e.g., "gpt-4o", "claude-3-5-sonnet")</small>
+          <small>Provider name (auto-filled from auth config)</small>
         </div>
 
         <div className="form-group">
@@ -196,7 +301,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
             onChange={e => setFormData({ ...formData, baseUrl: e.target.value })}
             placeholder="https://api.openai.com/v1"
           />
-          <small>Override the default API endpoint URL for compatible proxies</small>
+          <small>Override the default API endpoint URL</small>
         </div>
 
         <div className="form-group">

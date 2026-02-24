@@ -6,6 +6,8 @@ export interface Agent {
   status: 'running' | 'stopped' | 'error' | 'pending'
   endpoint: string
   image: string
+  modelId?: string
+  authConfigId?: string
   bearer_token?: string
   created_at?: string
   updated_at?: string
@@ -41,6 +43,8 @@ export interface CreateAgentRequest {
   agentType: 'docker' | 'native'
   endpoint: string
   description?: string
+  modelId?: string
+  authConfigId?: string
 }
 
 export interface CreateTaskRequest {
@@ -91,6 +95,17 @@ export interface CreateAuthConfigRequest {
   endpointUrl?: string
 }
 
+// Provider types
+export interface Provider {
+  id: string
+  name: string
+  authType: string
+  defaultUrl: string
+  apiKeyEnvVar: string
+  headers: Record<string, string>
+  description: string
+}
+
 // Copilot OAuth types
 export interface DeviceCodeResponse {
   device_code: string
@@ -105,6 +120,18 @@ export interface TokenResult {
   success: boolean
   message?: string
   configId?: string
+}
+
+export interface CopilotModel {
+  id: string
+  name: string
+  version: string
+  model_picker_enabled?: boolean
+  preview?: boolean
+}
+
+export interface CopilotModelsResponse {
+  data: CopilotModel[]
 }
 
 const API_BASE = '/api'
@@ -163,6 +190,12 @@ class ApiClient {
   async restartAgent(id: string): Promise<void> {
     const res = await fetch(`${API_BASE}/agents/${id}?action=restart`, { method: 'POST' })
     if (!res.ok) throw new Error('Failed to restart agent')
+  }
+
+  async pingAgent(id: string): Promise<{ online: boolean; error?: string; status?: number }> {
+    const res = await fetch(`${API_BASE}/agents/${id}?action=ping`)
+    if (!res.ok) throw new Error('Failed to test agent connection')
+    return res.json()
   }
 
   async listChannels(): Promise<Channel[]> {
@@ -312,11 +345,11 @@ class ApiClient {
     return res.json()
   }
 
-  async pollCopilotToken(deviceCode: string): Promise<TokenResult | null> {
+  async pollCopilotToken(deviceCode: string, configId?: string, name?: string): Promise<TokenResult | null> {
     const res = await fetch(`${API_BASE}/auth/copilot/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_code: deviceCode })
+      body: JSON.stringify({ device_code: deviceCode, configId, name })
     })
     if (res.status === 202) {
       // Still waiting for user authorization
@@ -324,6 +357,65 @@ class ApiClient {
     }
     if (!res.ok) throw new Error('Failed to get token')
     return res.json()
+  }
+
+  async fetchCopilotModels(configId: string): Promise<CopilotModel[]> {
+    const res = await fetch(`${API_BASE}/auth/copilot/models?configId=${configId}`)
+    if (!res.ok) throw new Error('Failed to fetch Copilot models')
+    const data: CopilotModelsResponse = await res.json()
+    return data.data || []
+  }
+
+  async discoverModels(configId: string): Promise<CopilotModel[]> {
+    const res = await fetch(`${API_BASE}/auth/discover-models?configId=${configId}`)
+    if (!res.ok) throw new Error('Failed to discover models')
+    const data: CopilotModelsResponse = await res.json()
+    return data.data || []
+  }
+
+  // ============================================================================
+  // Provider Registry
+  // ============================================================================
+
+  async listProviders(): Promise<Provider[]> {
+    const res = await fetch(`${API_BASE}/providers`)
+    if (!res.ok) throw new Error('Failed to fetch providers')
+    return res.json()
+  }
+
+  async getProvider(id: string): Promise<Provider> {
+    const res = await fetch(`${API_BASE}/providers/${id}`)
+    if (!res.ok) throw new Error('Failed to fetch provider')
+    return res.json()
+  }
+
+  // ============================================================================
+  // Chat Completions (for testing models)
+  // ============================================================================
+
+  async sendChatMessage(modelId: string, messages: { role: 'user' | 'assistant' | 'system'; content: string }[]): Promise<ChatCompletionResponse> {
+    const res = await fetch(`${API_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelId, messages })
+    })
+    if (!res.ok) {
+      const error = await res.text()
+      throw new Error(error || 'Failed to send chat message')
+    }
+    return res.json()
+  }
+}
+
+export interface ChatCompletionResponse {
+  choices: Array<{
+    message: {
+      role: string
+      content: string
+    }
+  }>
+  error?: {
+    message: string
   }
 }
 

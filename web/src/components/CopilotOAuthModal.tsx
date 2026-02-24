@@ -4,10 +4,13 @@ import Alert from './Alert'
 import { api } from '../api/client'
 
 interface CopilotOAuthModalProps {
+  configId?: string
+  configName?: string
   onSuccess: (configId?: string) => void
-  onCancel: () => void}
+  onCancel: () => void
+}
 
-export default function CopilotOAuthModal({ onSuccess, onCancel }: CopilotOAuthModalProps) {
+export default function CopilotOAuthModal({ configId, configName, onSuccess, onCancel }: CopilotOAuthModalProps) {
   const [deviceCode, setDeviceCode] = useState('')
   const [userCode, setUserCode] = useState('')
   const [verificationUri, setVerificationUri] = useState('')
@@ -76,10 +79,9 @@ export default function CopilotOAuthModal({ onSuccess, onCancel }: CopilotOAuthM
     if (!deviceCode || status !== 'polling') return
 
     try {
-      const response = await api.pollCopilotToken(deviceCode)
+      const response = await api.pollCopilotToken(deviceCode, configId, configName)
 
       if (response) {
-        // Token received and saved server-side!
         setStatus('success')
         onSuccess(response.configId)
         return
@@ -91,7 +93,7 @@ export default function CopilotOAuthModal({ onSuccess, onCancel }: CopilotOAuthM
       setError(err instanceof Error ? err.message : 'Failed to get token')
       setStatus('error')
     }
-  }, [deviceCode, status, pollInterval, onSuccess])
+  }, [deviceCode, status, pollInterval, configId, configName, onSuccess])
 
   // Start polling when we have device code
   useEffect(() => {
@@ -237,27 +239,25 @@ export default function CopilotOAuthModal({ onSuccess, onCancel }: CopilotOAuthM
 
       {status === 'success' && (
         <div style={{ textAlign: 'center', padding: '1rem' }}>
-          <div
-            style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              background: 'var(--color-success-subtle)',
-              color: 'var(--color-success)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 1rem',
-              fontSize: '2rem'
-            }}
-          >
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: 'var(--color-success-subtle)',
+            color: 'var(--color-success)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 1rem',
+            fontSize: '2rem'
+          }}>
             ✓
           </div>
           <h3 style={{ color: 'var(--color-success)', marginBottom: '0.5rem' }}>
             Authentication Successful!
           </h3>
           <p style={{ color: 'var(--color-text-muted)' }}>
-            Your GitHub Copilot token has been saved.
+            Your GitHub Copilot token has been saved. Models are being synced automatically.
           </p>
         </div>
       )}

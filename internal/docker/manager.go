@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/zeroclaw/bot-portal/internal/provider"
 )
 
 // Manager handles Docker container lifecycle
@@ -120,8 +121,9 @@ type A2APeer struct {
 //   - /proc filesystem on the host
 //
 // For production deployments, consider using Docker secrets or mounted files instead:
-//   https://docs.docker.com/engine/swarm/secrets/
-//   https://docs.docker.com/compose/use-secrets/
+//
+//	https://docs.docker.com/engine/swarm/secrets/
+//	https://docs.docker.com/compose/use-secrets/
 //
 // The proper fix would require architectural changes to support secret injection
 // via files (e.g., /run/secrets/API_KEY) instead of environment variables.
@@ -159,18 +161,29 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 		}
 
 		// Inject provider-specific API key environment variables
-		switch config.AuthConfig.Type {
-		case "github_copilot", "github_copilot_oauth":
-			if config.AuthConfig.ApiKey != "" {
-				envVars = append(envVars, fmt.Sprintf("COPILOT_API_KEY=%s", config.AuthConfig.ApiKey))
+		// Use the provider registry to determine the correct env var name
+		if config.AuthConfig.ApiKey != "" {
+			envVarName := provider.GetAPIKeyEnvVar(config.AuthConfig.Type)
+			if envVarName != "API_KEY" {
+				envVars = append(envVars, fmt.Sprintf("%s=%s", envVarName, config.AuthConfig.ApiKey))
 			}
-		case "anthropic":
-			if config.AuthConfig.ApiKey != "" {
-				envVars = append(envVars, fmt.Sprintf("ANTHROPIC_API_KEY=%s", config.AuthConfig.ApiKey))
-			}
-		case "openai":
-			if config.AuthConfig.ApiKey != "" {
-				envVars = append(envVars, fmt.Sprintf("OPENAI_API_KEY=%s", config.AuthConfig.ApiKey))
+		}
+
+		// Also inject based on model provider if available
+		if config.ModelConfig != nil && config.ModelConfig.Provider != "" {
+			envVarName := provider.GetAPIKeyEnvVar(config.ModelConfig.Provider)
+			if envVarName != "API_KEY" && config.AuthConfig.ApiKey != "" {
+				// Only add if not already added
+				found := false
+				for _, env := range envVars {
+					if len(env) > len(envVarName) && env[:len(envVarName)] == envVarName {
+						found = true
+						break
+					}
+				}
+				if !found {
+					envVars = append(envVars, fmt.Sprintf("%s=%s", envVarName, config.AuthConfig.ApiKey))
+				}
 			}
 		}
 	}
@@ -180,6 +193,7 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 
 var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "/zeroclaw-data/workspace"
 config_path = "/zeroclaw-data/.zeroclaw/config.toml"
+default_temperature = 0.7
 
 [gateway]
 port = {{ .GatewayPort }}
@@ -231,6 +245,12 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 
 	if err := agentConfigTmpl.Execute(f, data); err != nil {
 		return "", fmt.Errorf("failed to write config: %w", err)
+	}
+	f.Close()
+
+	// Fix world-readable warning from zeroclaw
+	if err := os.Chmod(configPath, 0600); err != nil {
+		fmt.Printf("Warning: failed to chmod config file: %v\n", err)
 	}
 
 	return configPath, nil

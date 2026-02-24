@@ -12,6 +12,9 @@ A web portal for managing multiple AI agents running as Docker containers. Serve
 - **Bearer Token Auth**: Secure agent-to-agent authentication
 - **Central Model Store**: Manage shared AI model configurations across agents
 - **Authentication Store**: Secure API key and credential management encrypted at rest
+- **25+ AI Providers**: Pre-configured support for OpenAI, Anthropic, Kimi, DeepSeek, GLM, MiniMax, Qwen, and more
+- **Auto Model Discovery**: Automatically fetch available models from provider endpoints
+- **Test Chat**: Interactive chat interface to test models directly in the portal
 - **REST API**: Full HTTP API for portal management
 - **React Frontend**: Web dashboard for monitoring and control
 
@@ -64,6 +67,58 @@ make build
 ```
 
 The portal will start on `http://localhost:8080`
+
+## Supported AI Providers
+
+Bot Portal includes pre-configured support for 25+ AI providers with correct endpoints, headers, and authentication:
+
+### Popular Providers
+| Provider | ID | Endpoint | Auth Type |
+|----------|-----|----------|-----------|
+| OpenAI | `openai` | https://api.openai.com/v1 | API Key |
+| Anthropic | `anthropic` | https://api.anthropic.com/v1 | API Key |
+| GitHub Copilot | `github_copilot` | https://api.githubcopilot.com | OAuth |
+| Google Gemini | `gemini` | https://generativelanguage.googleapis.com/v1beta | API Key |
+
+### Chinese Providers
+| Provider | ID | Endpoint | Notes |
+|----------|-----|----------|-------|
+| Kimi (Moonshot) | `kimi` | https://api.moonshot.cn/v1 | User-Agent header auto-applied |
+| Kimi Code | `kimi-code` | https://api.kimi.com/coding/v1 | Coding-optimized models |
+| DeepSeek | `deepseek` | https://api.deepseek.com | - |
+| GLM (Zhipu) | `glm` | https://open.bigmodel.cn/api/paas/v4 | - |
+| MiniMax | `minimax` | https://api.minimaxi.com/v1 | Global endpoint |
+| Qwen | `qwen` | https://dashscope.aliyuncs.com/compatible-mode/v1 | Alibaba Dashscope |
+| Qwen Code | `qwen-code` | https://chat.qwen.ai/api | OAuth support |
+| Baidu Qianfan | `qianfan` | https://aip.baidubce.com | - |
+
+### Open Source & Inference
+| Provider | ID | Endpoint |
+|----------|-----|----------|
+| Groq | `groq` | https://api.groq.com/openai/v1 |
+| Together AI | `together` | https://api.together.xyz/v1 |
+| Fireworks | `fireworks` | https://api.fireworks.ai/inference/v1 |
+| Mistral | `mistral` | https://api.mistral.ai/v1 |
+| Ollama | `ollama` | http://localhost:11434/v1 |
+| LM Studio | `lmstudio` | http://localhost:1234/v1 |
+| OpenRouter | `openrouter` | https://openrouter.ai/api/v1 |
+
+### Enterprise
+| Provider | ID | Endpoint |
+|----------|-----|----------|
+| xAI (Grok) | `xai` | https://api.x.ai/v1 |
+| Perplexity | `perplexity` | https://api.perplexity.ai |
+| Cohere | `cohere` | https://api.cohere.com/compatibility/v1 |
+| Cloudflare AI | `cloudflare` | https://gateway.ai.cloudflare.com/v1 |
+
+### Custom Providers
+For any OpenAI-compatible endpoint not listed, use the **Custom Provider** option and specify your own endpoint URL.
+
+### Model Discovery
+When you add an auth config with a provider:
+1. The portal automatically queries the provider's `/models` endpoint
+2. Available models are saved to the database
+3. Models are automatically deleted when the auth config is removed
 
 ### Docker Compose
 

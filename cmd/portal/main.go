@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/zeroclaw/bot-portal/internal/api"
 	"github.com/zeroclaw/bot-portal/internal/docker"
 	"github.com/zeroclaw/bot-portal/internal/store"
@@ -14,6 +15,9 @@ func main() {
 	// Parse command line flags
 	migrateOnly := flag.Bool("migrate-only", false, "Run migrations only and exit")
 	flag.Parse()
+
+	// Load .env if present
+	_ = godotenv.Load()
 
 	// Initialize SQLite store
 	db, err := store.NewSQLite("db/portal.db")

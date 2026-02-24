@@ -5,6 +5,8 @@ go 1.25.4
 require (
 	github.com/docker/docker v27.4.1+incompatible
 	github.com/docker/go-connections v0.6.0
+	github.com/google/uuid v1.6.0
+	github.com/joho/godotenv v1.5.1
 	modernc.org/sqlite v1.46.1
 )
 
@@ -19,7 +21,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/term v0.5.2 // indirect

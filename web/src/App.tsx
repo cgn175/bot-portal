@@ -7,6 +7,7 @@ import MessageViewer from './pages/MessageViewer'
 import ChannelView from './pages/ChannelView'
 import Models from './pages/Models'
 import AuthConfigs from './pages/AuthConfigs'
+import TestChat from './pages/TestChat'
 
 function App() {
   const location = useLocation()
@@ -53,6 +54,13 @@ function App() {
               <span>Auth</span>
             </Link>
             <Link
+              to="/test-chat"
+              className={`nav-link ${isActive('/test-chat') ? 'active' : ''}`}
+              aria-current={isActive('/test-chat') ? 'page' : undefined}
+            >
+              <span>Chat</span>
+            </Link>
+            <Link
               to="/messages"
               className={`nav-link ${isActive('/messages') ? 'active' : ''}`}
               aria-current={isActive('/messages') ? 'page' : undefined}
@@ -69,6 +77,7 @@ function App() {
               <Route path="/agents/:id" element={<AgentDetail />} />
               <Route path="/models" element={<Models />} />
               <Route path="/auth-configs" element={<AuthConfigs />} />
+              <Route path="/test-chat" element={<TestChat />} />
               <Route path="/messages" element={<MessageViewer />} />
               <Route path="/channels/:id" element={<ChannelView />} />
             </Routes>

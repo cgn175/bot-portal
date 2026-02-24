@@ -15,6 +15,7 @@ export default function AgentDetail() {
   const agent = agents.find(a => a.id === id)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [pinging, setPinging] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
 
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
@@ -42,6 +43,25 @@ export default function AgentDetail() {
       setError(err instanceof Error ? err.message : 'Failed to delete agent')
     }
   }, [id, navigate])
+
+  const handlePing = useCallback(async () => {
+    if (!id) return
+    try {
+      setError('')
+      setSuccess('')
+      setPinging(true)
+      const result = await api.pingAgent(id)
+      if (result.online) {
+        setSuccess('Agent is online and responding')
+      } else {
+        setError(`Agent is offline: ${result.error || 'Connection failed'}`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to test connection')
+    } finally {
+      setPinging(false)
+    }
+  }, [id])
 
   const copyToken = useCallback(() => {
     if (agent?.bearer_token) {
@@ -217,8 +237,13 @@ export default function AgentDetail() {
           >
             📨 View Messages
           </Link>
-          <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }}>
-            🔗 Test Connection
+          <button
+            className="btn btn-secondary"
+            style={{ justifyContent: 'flex-start' }}
+            onClick={handlePing}
+            disabled={pinging}
+          >
+            {pinging ? '⏳ Testing...' : '🔗 Test Connection'}
           </button>
         </div>
       </div>

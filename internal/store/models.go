@@ -183,3 +183,13 @@ func (s *ModelStore) Delete(id string) error {
 
 	return nil
 }
+
+// DeleteByProvider removes all models for a given provider
+func (s *ModelStore) DeleteByProvider(provider string) error {
+	query := `DELETE FROM models WHERE provider = ?`
+	_, err := s.db.Exec(query, provider)
+	if err != nil {
+		return fmt.Errorf("failed to delete models by provider: %w", err)
+	}
+	return nil
+}

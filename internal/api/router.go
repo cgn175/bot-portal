@@ -20,14 +20,14 @@ import (
 
 // Router is the main HTTP router
 type Router struct {
-	db                *sql.DB
-	dockerMgr         *docker.Manager
-	agentStore        *store.AgentStore
-	channelStore      *store.ChannelStore
-	messageStore      *store.MessageStore
-	modelStore        *store.ModelStore
-	authConfigStore   *store.AuthConfigStore
-	a2aRouter         *a2a.Router
+	db              *sql.DB
+	dockerMgr       *docker.Manager
+	agentStore      *store.AgentStore
+	channelStore    *store.ChannelStore
+	messageStore    *store.MessageStore
+	modelStore      *store.ModelStore
+	authConfigStore *store.AuthConfigStore
+	a2aRouter       *a2a.Router
 }
 
 // NewRouter creates a new API router
@@ -101,14 +101,26 @@ func (r *Router) Run(addr string) error {
 	// GitHub Copilot OAuth Device Flow
 	mux.HandleFunc("/api/auth/copilot/device-code", r.handleCopilotDeviceCode)
 	mux.HandleFunc("/api/auth/copilot/token", r.handleCopilotToken)
+	mux.HandleFunc("/api/auth/copilot/models", r.handleCopilotModels)
+
+	// Generic model discovery (works for any auth config type)
+	mux.HandleFunc("/api/auth/discover-models", r.handleDiscoverModels)
+
+	// Chat completions endpoint for testing models
+	mux.HandleFunc("/api/chat/completions", r.handleChatCompletions)
+
+	// Provider registry
+	mux.HandleFunc("/api/providers", r.handleProviders)
+	mux.HandleFunc("/api/providers/", r.handleProviderDetail)
 
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("OK"))
 	})
 
-	// Wrap with CORS middleware
+	// Wrap with middleware (CORS first, then logging)
 	handler := r.corsMiddleware(mux)
+	handler = r.loggingMiddleware(handler)
 
 	log.Printf("Server starting on %s", addr)
 	return http.ListenAndServe(addr, handler)
@@ -127,6 +139,34 @@ func (r *Router) corsMiddleware(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, req)
+	})
+}
+
+// responseRecorder wraps http.ResponseWriter to capture status code
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func newResponseRecorder(w http.ResponseWriter) *responseRecorder {
+	return &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+}
+
+func (rr *responseRecorder) WriteHeader(code int) {
+	rr.statusCode = code
+	rr.ResponseWriter.WriteHeader(code)
+}
+
+// loggingMiddleware logs HTTP requests with method, path, status, and duration
+func (r *Router) loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
+		rr := newResponseRecorder(w)
+
+		next.ServeHTTP(rr, req)
+
+		duration := time.Since(start)
+		log.Printf("[%s] %s %s - %d (%v)", req.Method, req.URL.Path, req.RemoteAddr, rr.statusCode, duration)
 	})
 }
 
@@ -242,6 +282,8 @@ func (r *Router) handleAgentDetail(w http.ResponseWriter, req *http.Request) {
 		r.stopAgent(w, req, agentID)
 	case "restart":
 		r.restartAgent(w, req, agentID)
+	case "ping":
+		r.pingAgent(w, req, agentID)
 	case "logs":
 		r.streamAgentLogs(w, req, agentID)
 	default:
@@ -639,6 +681,46 @@ func (r *Router) restartAgent(w http.ResponseWriter, req *http.Request, agentID 
 	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
 }
 
+func (r *Router) pingAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil || agent == nil {
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	if agent.Endpoint == "" {
+		http.Error(w, "Agent has no endpoint", http.StatusBadRequest)
+		return
+	}
+
+	// Try to reach the agent's well-known card
+	client := http.Client{Timeout: 5 * time.Second}
+	// Add slash if missing
+	endpoint := agent.Endpoint
+	if endpoint[len(endpoint)-1] != '/' {
+		endpoint += "/"
+	}
+
+	resp, err := client.Get(endpoint + ".well-known/agent.json")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"online": false,
+			"error":  err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	online := resp.StatusCode == http.StatusOK
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"online": online,
+		"status": resp.StatusCode,
+	})
+}
+
 func (r *Router) streamAgentLogs(w http.ResponseWriter, req *http.Request, agentID string) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -858,5 +940,3 @@ func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {
 
 	return result, nil
 }
-
-

@@ -56,7 +56,7 @@ export default function AuthConfigs() {
     setEditingConfig(undefined)
   }, [])
 
-  if (loading && configs.length === 0) {
+  if (loading && (!configs || configs.length === 0)) {
     return (
       <div>
         <div className="page-header">
@@ -94,7 +94,7 @@ export default function AuthConfigs() {
         </Alert>
       )}
 
-      {configs.length === 0 ? (
+      {!configs || configs.length === 0 ? (
         <EmptyState
           icon="🔐"
           title="No auth configs yet"
@@ -166,14 +166,14 @@ export default function AuthConfigs() {
 
 function AuthTypeBadge({ authType }: { authType: string }) {
   const authTypeLabels: Record<string, string> = {
-    bearer_token: 'Bearer Token',
-    basic_auth: 'Basic Auth',
-    github_copilot_oauth: 'GitHub Copilot OAuth'
+    bearer_token: 'Custom',
+    basic_auth: 'Custom',
+    github_copilot_oauth: 'GitHub Copilot'
   }
 
   const authTypeColors: Record<string, { bg: string; color: string }> = {
     bearer_token: { bg: 'var(--color-primary-subtle)', color: 'var(--color-primary)' },
-    basic_auth: { bg: 'var(--color-warning-subtle)', color: 'var(--color-warning)' },
+    basic_auth: { bg: 'var(--color-primary-subtle)', color: 'var(--color-primary)' },
     github_copilot_oauth: { bg: 'var(--color-success-subtle)', color: 'var(--color-success)' }
   }
 

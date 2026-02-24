@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api, Model } from '../api/client'
+import { api, Model, AuthConfig } from '../api/client'
 import Alert from '../components/Alert'
 import EmptyState from '../components/EmptyState'
 import { SkeletonCard } from '../components/LoadingState'
@@ -7,17 +7,23 @@ import ModelForm from './ModelForm'
 
 export default function Models() {
   const [models, setModels] = useState<Model[]>([])
+  const [authConfigs, setAuthConfigs] = useState<AuthConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingModel, setEditingModel] = useState<Model | undefined>()
+  const [syncing, setSyncing] = useState(false)
 
-  const fetchModels = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await api.listModels()
-      setModels(data)
+      const [modelsData, configsData] = await Promise.all([
+        api.listModels(),
+        api.listAuthConfigs()
+      ])
+      setModels(modelsData)
+      setAuthConfigs(configsData)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch models')
@@ -27,14 +33,14 @@ export default function Models() {
   }, [])
 
   useEffect(() => {
-    fetchModels()
-  }, [fetchModels])
+    fetchData()
+  }, [fetchData])
 
   const handleModelSaved = useCallback(() => {
     setShowForm(false)
     setEditingModel(undefined)
-    fetchModels()
-  }, [fetchModels])
+    fetchData()
+  }, [fetchData])
 
   const handleEdit = useCallback((model: Model) => {
     setEditingModel(model)
@@ -45,18 +51,37 @@ export default function Models() {
     if (!confirm(`Delete model ${id}?`)) return
     try {
       await api.deleteModel(id)
-      fetchModels()
+      fetchData()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to delete model')
     }
-  }, [fetchModels])
+  }, [fetchData])
 
   const handleCancel = useCallback(() => {
     setShowForm(false)
     setEditingModel(undefined)
   }, [])
 
-  if (loading && models.length === 0) {
+  const handleSync = useCallback(async () => {
+    setSyncing(true)
+    setActionError('')
+    try {
+      // Trigger re-discovery by re-saving each auth config (update with no changes)
+      // This triggers the backend's discoverAndSaveModels
+      for (const config of authConfigs) {
+        await api.updateAuthConfig(config.id, {})
+      }
+      // Wait a moment for async discovery to complete, then refresh
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      await fetchData()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to sync models')
+    } finally {
+      setSyncing(false)
+    }
+  }, [authConfigs, fetchData])
+
+  if (loading && (!models || models.length === 0)) {
     return (
       <div>
         <div className="page-header">
@@ -73,13 +98,24 @@ export default function Models() {
         <div>
           <h2>Models</h2>
           <p style={{ color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
-            Manage AI model configurations for your agents
+            Models are automatically discovered from your auth providers
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          <span>+</span>
-          <span>Add Model</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {authConfigs?.length > 0 && (
+            <button
+              className="btn btn-secondary"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              {syncing ? 'Syncing...' : '↻ Sync from Providers'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            <span>+</span>
+            <span>Add Model</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -94,15 +130,25 @@ export default function Models() {
         </Alert>
       )}
 
-      {models.length === 0 ? (
+      {!models || models.length === 0 ? (
         <EmptyState
           icon="🧠"
           title="No models configured yet"
-          description="Add your first model configuration to enable AI capabilities for your agents."
+          description={
+            authConfigs?.length > 0
+              ? 'Models will be auto-discovered when you add an auth provider. Click "Sync from Providers" to refresh.'
+              : 'Set up an auth provider first — models will be auto-discovered, or add one manually.'
+          }
           action={
-            <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-              Add Your First Model
-            </button>
+            authConfigs?.length > 0 ? (
+              <button className="btn btn-primary" onClick={handleSync} disabled={syncing}>
+                {syncing ? 'Syncing...' : 'Sync from Providers'}
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+                Add Model Manually
+              </button>
+            )
           }
         />
       ) : (
@@ -170,6 +216,7 @@ function ProviderBadge({ provider }: { provider: string }) {
     anthropic: '#d4a574',
     gemini: '#4285f4',
     copilot: '#6e7681',
+    custom: '#8b5cf6',
     ollama: '#ff6b35',
     openrouter: '#ef4444'
   }
