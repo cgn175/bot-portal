@@ -54,7 +54,7 @@ var (
 		ID:           "anthropic",
 		Name:         "Anthropic",
 		AuthType:     "bearer_token",
-		AuthStyle:    AuthStyleBearer,
+		AuthStyle:    AuthStyleXApiKey,
 		DefaultURL:   "https://api.anthropic.com/v1",
 		APIKeyEnvVar: "ANTHROPIC_API_KEY",
 		Headers: map[string]string{

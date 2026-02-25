@@ -299,7 +299,7 @@ func (r *Router) handleDiscoverModels(w http.ResponseWriter, req *http.Request) 
 	log.Printf("[discover-models] auth config %s has credential keys: %v", config.ID, credKeys)
 
 	// Determine token and URL based on auth type
-	var token, baseURL string
+	var token, baseURL, discoverProvider string
 	if config.AuthType == "github_copilot_oauth" {
 		// Use the Copilot API key (not the GitHub access token)
 		token = creds["copilot_api_key"]
@@ -311,9 +311,11 @@ func (r *Router) handleDiscoverModels(w http.ResponseWriter, req *http.Request) 
 		if baseURL == "" {
 			baseURL = "https://api.githubcopilot.com"
 		}
+		discoverProvider = "copilot"
 	} else {
 		token = creds["api_key"]
 		baseURL = strings.TrimRight(config.EndpointURL, "/")
+		discoverProvider = config.Provider
 	}
 
 	if token == "" {
@@ -353,11 +355,12 @@ func (r *Router) handleDiscoverModels(w http.ResponseWriter, req *http.Request) 
 		if err != nil {
 			continue
 		}
-		modelsReq.Header.Set("Authorization", "Bearer "+token)
+		authHeaderName, authHeaderValue := provider.GetAuthHeader(discoverProvider, token)
+		modelsReq.Header.Set(authHeaderName, authHeaderValue)
 		modelsReq.Header.Set("Accept", "application/json")
 
 		// Apply provider-specific headers from registry
-		applyProviderHeaders(modelsReq, config.Provider, baseURL)
+		applyProviderHeaders(modelsReq, discoverProvider, baseURL)
 
 		resp, err := client.Do(modelsReq)
 		if err != nil {
@@ -404,7 +407,7 @@ func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 		log.Printf("[model-discovery] credential %s for %s: %s", k, config.ID, preview)
 	}
 
-	var token, baseURL, provider string
+	var token, baseURL, providerID string
 	if config.AuthType == "github_copilot_oauth" {
 		// Use the Copilot API key (not the GitHub access token)
 		token = creds["copilot_api_key"]
@@ -416,11 +419,11 @@ func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 		if baseURL == "" {
 			baseURL = "https://api.githubcopilot.com"
 		}
-		provider = "copilot"
+		providerID = "copilot"
 	} else {
 		token = creds["api_key"]
 		baseURL = strings.TrimRight(config.EndpointURL, "/")
-		provider = config.Provider
+		providerID = config.Provider
 	}
 
 	if token == "" {
@@ -438,7 +441,7 @@ func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 	} else if len(token) > 0 {
 		tokenPreview = "[token too short]"
 	}
-	log.Printf("[model-discovery] config %s: baseURL=%s, provider=%s, token_length=%d, token_preview=%s", config.ID, baseURL, provider, len(token), tokenPreview)
+	log.Printf("[model-discovery] config %s: baseURL=%s, provider=%s, token_length=%d, token_preview=%s", config.ID, baseURL, providerID, len(token), tokenPreview)
 
 	// Check if token already has bearer prefix (would cause "Bearer bearer ..." issue)
 	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
@@ -463,16 +466,16 @@ func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 			log.Printf("[model-discovery] failed to create request for %s (%s): %v", config.ID, u, err)
 			continue
 		}
-		authHeader := fmt.Sprintf("Bearer %s", token)
+		authHeaderName, authHeaderValue := provider.GetAuthHeader(providerID, token)
 		if config.AuthType == "github_copilot_oauth" {
 			// Log what we're sending (mask the token)
-			log.Printf("[model-discovery] setting Authorization header for %s: Bearer %s... (length: %d)", config.ID, token[:min(10, len(token))], len(authHeader))
+			log.Printf("[model-discovery] setting %s header for %s: %s... (length: %d)", authHeaderName, config.ID, token[:min(10, len(token))], len(authHeaderValue))
 		}
-		req.Header.Set("Authorization", authHeader)
+		req.Header.Set(authHeaderName, authHeaderValue)
 		req.Header.Set("Accept", "application/json")
 
 		// Apply provider-specific headers from registry
-		applyProviderHeaders(req, provider, baseURL)
+		applyProviderHeaders(req, providerID, baseURL)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -513,7 +516,7 @@ func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 			model := &models.Model{
 				ID:              m.ID,
 				Name:            name,
-				Provider:        provider,
+				Provider:        providerID,
 				ModelIdentifier: m.ID,
 				EndpointURL:     baseURL,
 				CreatedAt:       now,
@@ -525,7 +528,7 @@ func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 			}
 			saved++
 		}
-		log.Printf("[model-discovery] saved %d new models from %s (provider: %s)", saved, config.ID, provider)
+		log.Printf("[model-discovery] saved %d new models from %s (provider: %s)", saved, config.ID, providerID)
 		return
 	}
 

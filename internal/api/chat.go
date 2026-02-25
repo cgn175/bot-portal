@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/zeroclaw/bot-portal/internal/provider"
 )
 
 // ChatRequest represents a chat completion request
@@ -115,8 +117,9 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	// Set headers
-	proxyReq.Header.Set("Authorization", "Bearer "+token)
+	// Set auth header using provider registry (respects x-api-key, Bearer, custom styles)
+	authHeaderName, authHeaderValue := provider.GetAuthHeader(model.Provider, token)
+	proxyReq.Header.Set(authHeaderName, authHeaderValue)
 	proxyReq.Header.Set("Content-Type", "application/json")
 	proxyReq.Header.Set("Accept", "application/json")
 
