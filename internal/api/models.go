@@ -62,7 +62,7 @@ func (r *Router) createModel(w http.ResponseWriter, req *http.Request) {
 		Name         string                 `json:"name"`
 		Provider     string                 `json:"provider"`
 		ModelName    string                 `json:"modelName"`
-		APIKeyConfig map[string]string      `json:"apiKeyConfig"`
+		APIKeyConfig map[string]interface{}  `json:"apiKeyConfig"`
 		BaseURL      string                 `json:"baseUrl"`
 	}
 
