@@ -37,9 +37,9 @@ func TestBuildEnvironmentVars_CompleteConfig(t *testing.T) {
 	envVars := buildEnvironmentVars(config)
 
 	// Check that we have the expected number of env vars
-	// Base: 3, Model: 5, Auth: 3 = 11 total
-	if len(envVars) != 11 {
-		t.Errorf("Expected 11 environment variables, got %d: %v", len(envVars), envVars)
+	// Base: 3, Model: 5, Auth: 3, Provider-specific API key: 1 = 12 total
+	if len(envVars) != 12 {
+		t.Errorf("Expected 12 environment variables, got %d: %v", len(envVars), envVars)
 	}
 
 	// Build a map for easier checking
@@ -88,6 +88,9 @@ func TestBuildEnvironmentVars_CompleteConfig(t *testing.T) {
 	}
 	if envMap["API_KEY"] != "sk-test123" {
 		t.Errorf("Expected API_KEY=sk-test123, got %s", envMap["API_KEY"])
+	}
+	if envMap["OPENAI_API_KEY"] != "sk-test123" {
+		t.Errorf("Expected OPENAI_API_KEY=sk-test123, got %s", envMap["OPENAI_API_KEY"])
 	}
 }
 
