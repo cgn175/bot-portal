@@ -301,6 +301,19 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		peers[i].Endpoint = fmt.Sprintf("http://%s:%s", peers[i].ID, gatewayPort)
 	}
 
+	// Always add portal as a peer so the agent recognizes portal's bearer token
+	// Use host.docker.internal to allow agent to reach portal from inside container
+	portalEndpoint := config.PortalURL
+	if portalEndpoint == "" {
+		// Default to host.docker.internal if not specified
+		portalEndpoint = "http://host.docker.internal:8080"
+	}
+	peers = append(peers, A2APeer{
+		ID:          "portal",
+		Endpoint:    portalEndpoint,
+		BearerToken: config.PortalToken,
+	})
+
 	data := struct {
 		GatewayPort string
 		Peers       []A2APeer

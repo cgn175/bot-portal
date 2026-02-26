@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAgents } from '../contexts/AgentContext'
 import { api, Model, AuthConfig } from '../api/client'
 import AgentForm from '../components/AgentForm'
+import AgentChat from '../components/AgentChat'
 import Alert from '../components/Alert'
 import StatusBadge from '../components/StatusBadge'
 import { LoadingState } from '../components/LoadingState'
@@ -280,7 +281,14 @@ export default function AgentDetail() {
         </div>
       </div>
 
-      <div className="card">
+      {/* Chat with Agent - Only show for running agents */}
+      {agent.status === 'running' && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <AgentChat agentId={agent.id} agentToken={agent.bearer_token} />
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-semibold)', marginBottom: '1rem' }}>
           Quick Actions
         </h3>

@@ -229,12 +229,18 @@ class ApiClient {
     return res.json()
   }
 
-  async getTask(id: string, token: string): Promise<TaskLog> {
+  async getTask(id: string, token: string): Promise<{ task: TaskLog }> {
     const res = await fetch(`/tasks/${id}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('Failed to fetch task')
     return res.json()
+  }
+
+  async getTaskStream(id: string, token: string): Promise<EventSource> {
+    return new EventSource(`/tasks/${id}/stream`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    } as EventSourceInit)
   }
 
   streamMessages(channelId?: string): EventSource {
