@@ -35,21 +35,22 @@ func TestAuthConfigsAPI(t *testing.T) {
 
 	// Create router with nil docker manager (we won't test Docker-related functionality)
 	router := &Router{
-		db:              db,
-		agentStore:      store.NewAgentStore(db),
-		channelStore:    store.NewChannelStore(db),
-		messageStore:    store.NewMessageStore(db),
-		modelStore:      store.NewModelStore(db),
-		authConfigStore: store.NewAuthConfigStore(db),
+		db:                 db,
+		agentStore:         store.NewAgentStore(db),
+		channelStore:       store.NewChannelStore(db),
+		messageStore:       store.NewMessageStore(db),
+		modelStore:         store.NewModelStore(db),
+		authConfigStore:    store.NewAuthConfigStore(db),
+		skipModelDiscovery: true, // Skip async discovery to avoid race conditions in tests
 	}
 
 	// Test POST /api/auth-configs endpoint
 	t.Run("POST /api/auth-configs", func(t *testing.T) {
 		config := map[string]interface{}{
-			"id":          "test-auth-config",
-			"name":        "Test Auth Config",
-			"provider":    "openai",
-			"authType":    "bearer_token",
+			"id":       "test-auth-config",
+			"name":     "Test Auth Config",
+			"provider": "openai",
+			"authType": "bearer_token",
 			"credentials": map[string]string{
 				"api_key": "sk-test-secret-key",
 			},
@@ -195,10 +196,10 @@ func TestAuthConfigsAPI(t *testing.T) {
 	t.Run("POST /api/auth-configs duplicate ID returns 409", func(t *testing.T) {
 		// First create a config
 		config := map[string]interface{}{
-			"id":          "duplicate-test-config",
-			"name":        "Test Auth Config",
-			"provider":    "openai",
-			"authType":    "bearer_token",
+			"id":       "duplicate-test-config",
+			"name":     "Test Auth Config",
+			"provider": "openai",
+			"authType": "bearer_token",
 			"credentials": map[string]string{
 				"api_key": "sk-test-secret-key",
 			},

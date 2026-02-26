@@ -4,7 +4,7 @@ export interface Agent {
   description?: string
   agentType: 'docker' | 'native'
   status: 'running' | 'stopped' | 'error' | 'pending'
-  endpoint: string
+  endpoint?: string
   image: string
   modelId?: string
   authConfigId?: string
@@ -41,7 +41,7 @@ export interface CreateAgentRequest {
   name: string
   image: string
   agentType: 'docker' | 'native'
-  endpoint: string
+  endpoint?: string
   description?: string
   modelId?: string
   authConfigId?: string

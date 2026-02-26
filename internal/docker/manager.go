@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -44,8 +46,8 @@ func NewManager() (*Manager, error) {
 }
 
 // resolveDockerContextHost reads ~/.docker/config.json to find the active
-// Docker context and returns its endpoint host. Returns "" if the default
-// context is active or if detection fails.
+// Docker context and returns its endpoint host. It follows the Docker CLI
+// logic to resolve the endpoint from context metadata.
 func resolveDockerContextHost() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -53,22 +55,90 @@ func resolveDockerContextHost() string {
 	}
 
 	configPath := filepath.Join(home, ".docker", "config.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return ""
+	var currentContext string
+	if data, err := os.ReadFile(configPath); err == nil {
+		var config struct {
+			CurrentContext string `json:"currentContext"`
+		}
+		if err := json.Unmarshal(data, &config); err == nil {
+			currentContext = config.CurrentContext
+		}
 	}
 
-	var config struct {
-		CurrentContext string `json:"currentContext"`
-	}
-	if err := json.Unmarshal(data, &config); err != nil || config.CurrentContext == "" || config.CurrentContext == "default" {
-		return ""
+	if currentContext != "" && currentContext != "default" {
+		// Search for context metadata
+		contextMetaDir := filepath.Join(home, ".docker", "contexts", "meta")
+		if files, err := os.ReadDir(contextMetaDir); err == nil {
+			for _, f := range files {
+				if !f.IsDir() {
+					continue
+				}
+				metaPath := filepath.Join(contextMetaDir, f.Name(), "meta.json")
+				if metaData, err := os.ReadFile(metaPath); err == nil {
+					var meta struct {
+						Name      string `json:"Name"`
+						Endpoints struct {
+							Docker struct {
+								Host string `json:"Host"`
+							} `json:"docker"`
+						} `json:"Endpoints"`
+					}
+					if err := json.Unmarshal(metaData, &meta); err == nil && meta.Name == currentContext {
+						host := meta.Endpoints.Docker.Host
+						if host != "" {
+							// Check if the host is a local socket and if it exists
+							if strings.HasPrefix(host, "unix://") {
+								socketPath := strings.TrimPrefix(host, "unix://")
+								if _, err := os.Stat(socketPath); err == nil {
+									return host
+								}
+								// If the socket doesn't exist, we'll continue and try Podman fallback
+							} else {
+								// For other protocols (npipe://, tcp:// etc), return as is
+								return host
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// Docker Desktop on macOS uses a well-known socket path
-	socketPath := filepath.Join(home, ".docker", "run", "docker.sock")
-	if _, err := os.Stat(socketPath); err == nil {
-		return "unix://" + socketPath
+	// Fallback for Podman if no Docker context is set or if the context is broken.
+	// Check both Mac/Linux and Windows common paths.
+	podmanPaths := []string{
+		// macOS/Linux (Podman Machine)
+		filepath.Join(home, ".local/share/containers/podman/machine/qemu/podman.sock"),
+		filepath.Join(home, ".local/share/containers/podman/machine/applehv/podman.sock"),
+
+		// macOS temporary paths (sometimes used by Podman Desktop/Machine)
+		// User's specific path: /var/folders/gz/vlc1419x1xdbs03k67m68qqc0000gn/T/podman/podman-machine-default-api.sock
+		filepath.Join(os.TempDir(), "podman/podman-machine-default-api.sock"),
+
+		// Linux Rootless
+		filepath.Join("/run/user", fmt.Sprint(os.Getuid()), "podman/podman.sock"),
+
+		// Linux Rootful / Standard
+		"/run/podman/podman.sock",
+		"/var/run/podman.sock",
+
+		// Windows
+		`\\.\pipe\podman-machine-default`,
+		`\\.\pipe\podman-machine-default-api`,
+	}
+
+	// Check XDG_RUNTIME_DIR if it's set (Linux)
+	if xdgRuntimeDir := os.Getenv("XDG_RUNTIME_DIR"); xdgRuntimeDir != "" {
+		podmanPaths = append([]string{filepath.Join(xdgRuntimeDir, "podman/podman.sock")}, podmanPaths...)
+	}
+
+	for _, p := range podmanPaths {
+		if _, err := os.Stat(p); err == nil {
+			if strings.HasPrefix(p, `\\.\pipe\`) {
+				return "npipe://" + p
+			}
+			return "unix://" + p
+		}
 	}
 
 	return ""
@@ -225,6 +295,12 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		json.Unmarshal([]byte(config.A2APeersJSON), &peers)
 	}
 
+	// For Docker agents, we always derive the endpoint from the AgentID
+	for i := range peers {
+		// Assume internal Docker hostname: http://<AgentID>:<port>
+		peers[i].Endpoint = fmt.Sprintf("http://%s:%s", peers[i].ID, gatewayPort)
+	}
+
 	data := struct {
 		GatewayPort string
 		Peers       []A2APeer
@@ -233,11 +309,19 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		Peers:       peers,
 	}
 
-	tmpDir := filepath.Join(os.TempDir(), "bot-portal-configs")
+	tmpDir := os.Getenv("AGENT_CONFIG_DIR")
+	if tmpDir == "" {
+		tmpDir = filepath.Join(os.TempDir(), "bot-portal-configs")
+	}
 	os.MkdirAll(tmpDir, 0755)
 
 	configPath := filepath.Join(tmpDir, fmt.Sprintf("%s-config.toml", config.AgentID))
-	f, err := os.Create(configPath)
+	// Always remove whatever exists at that path to be safe, then ensure it's a file
+	if err := os.RemoveAll(configPath); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to remove existing config path: %w", err)
+	}
+
+	f, err := os.OpenFile(configPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
 		return "", fmt.Errorf("failed to create config file: %w", err)
 	}
@@ -258,7 +342,7 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 
 // CreateContainer creates a new Docker container for an agent
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
-	containerName := fmt.Sprintf("bot-portal-agent-%s", config.AgentID)
+	containerName := "bot-portal-agent-" + config.AgentID
 
 	// Try to get the image ID to avoid Docker adding prefixes
 	imageID := config.AgentImage
@@ -295,11 +379,6 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		return "", fmt.Errorf("failed to generate agent config: %w", err)
 	}
 
-	// Map host port (from endpoint URL) to the image's exposed port
-	portBindings := nat.PortMap{
-		containerPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", config.ListenPort)}},
-	}
-
 	// Build environment variables
 	envVars := buildEnvironmentVars(config)
 	envVars = append(envVars, fmt.Sprintf("ZEROCLAW_GATEWAY_PORT=%s", gatewayPort))
@@ -311,21 +390,51 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		ExposedPorts: nat.PortSet{containerPort: struct{}{}},
 	}
 
-	// Host config with config file bind mount
+	// Determine which network to use
+	selectedNetwork := "bot-portal"
+	networks, err := m.cli.NetworkList(ctx, network.ListOptions{})
+	if err == nil {
+		for _, net := range networks {
+			if net.Name == "bot-portal-network" {
+				selectedNetwork = "bot-portal-network"
+				break
+			}
+		}
+	}
+
+	// Determine host configuration path for bind mount.
+	// If AGENT_CONFIG_DIR_HOST is set, we use it as the source prefix for the bind mount
+	// (this is needed when running the portal inside a Docker container).
+	hostConfigPath := configPath
+	if hostPrefix := os.Getenv("AGENT_CONFIG_DIR_HOST"); hostPrefix != "" {
+		hostConfigPath = filepath.Join(hostPrefix, filepath.Base(configPath))
+	}
+	absConfigPath, _ := filepath.Abs(hostConfigPath)
+
+	// On some systems (like macOS with Podman), if the file doesn't exist on the host,
+	// Docker/Podman might create it as a directory. We ensure it's a file above.
+	// We also use Mounts instead of Binds for more explicit control if needed,
+	// but Binds is usually fine if the host path exists.
 	hostConfig := &container.HostConfig{
-		PortBindings:    portBindings,
-		NetworkMode:     "bot-portal",
+		NetworkMode:     container.NetworkMode(selectedNetwork),
 		AutoRemove:      false,
 		PublishAllPorts: false,
-		Binds: []string{
-			fmt.Sprintf("%s:/zeroclaw-data/.zeroclaw/config.toml:ro", configPath),
+		Mounts: []mount.Mount{
+			{
+				Type:     mount.TypeBind,
+				Source:   absConfigPath,
+				Target:   "/zeroclaw-data/.zeroclaw/config.toml",
+				ReadOnly: true,
+			},
 		},
 	}
 
 	// Network config
 	networkConfig := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			"bot-portal": {},
+			selectedNetwork: {
+				Aliases: []string{config.AgentID},
+			},
 		},
 	}
 
@@ -394,10 +503,22 @@ func (m *Manager) EnsureNetwork(ctx context.Context) error {
 		return fmt.Errorf("failed to list networks: %w", err)
 	}
 
-	for _, net := range networks {
-		if net.Name == "bot-portal" {
-			return nil
+	// Check both "bot-portal" and "bot-portal-network" for consistency with docker-compose
+	var selectedNetwork string
+	for _, netName := range []string{"bot-portal", "bot-portal-network"} {
+		for _, net := range networks {
+			if net.Name == netName {
+				selectedNetwork = netName
+				break
+			}
 		}
+		if selectedNetwork != "" {
+			break
+		}
+	}
+
+	if selectedNetwork != "" {
+		return nil
 	}
 
 	_, err = m.cli.NetworkCreate(ctx, "bot-portal", network.CreateOptions{
@@ -408,6 +529,26 @@ func (m *Manager) EnsureNetwork(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// GetContainerIP returns the IP address of a container in the bot-portal network
+func (m *Manager) GetContainerIP(ctx context.Context, containerID string) (string, error) {
+	inspect, err := m.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	// Try "bot-portal" network first
+	if network, ok := inspect.NetworkSettings.Networks["bot-portal"]; ok {
+		return network.IPAddress, nil
+	}
+
+	// Try "bot-portal-network" as fallback
+	if network, ok := inspect.NetworkSettings.Networks["bot-portal-network"]; ok {
+		return network.IPAddress, nil
+	}
+
+	return "", fmt.Errorf("container not connected to bot-portal or bot-portal-network")
 }
 
 // Close closes the Docker manager

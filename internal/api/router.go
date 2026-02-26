@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -20,14 +21,15 @@ import (
 
 // Router is the main HTTP router
 type Router struct {
-	db              *sql.DB
-	dockerMgr       *docker.Manager
-	agentStore      *store.AgentStore
-	channelStore    *store.ChannelStore
-	messageStore    *store.MessageStore
-	modelStore      *store.ModelStore
-	authConfigStore *store.AuthConfigStore
-	a2aRouter       *a2a.Router
+	db                 *sql.DB
+	dockerMgr          *docker.Manager
+	agentStore         *store.AgentStore
+	channelStore       *store.ChannelStore
+	messageStore       *store.MessageStore
+	modelStore         *store.ModelStore
+	authConfigStore    *store.AuthConfigStore
+	a2aRouter          *a2a.Router
+	skipModelDiscovery bool // For testing: skip async model discovery
 }
 
 // NewRouter creates a new API router
@@ -155,6 +157,12 @@ func newResponseRecorder(w http.ResponseWriter) *responseRecorder {
 func (rr *responseRecorder) WriteHeader(code int) {
 	rr.statusCode = code
 	rr.ResponseWriter.WriteHeader(code)
+}
+
+func (rr *responseRecorder) Flush() {
+	if flusher, ok := rr.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // loggingMiddleware logs HTTP requests with method, path, status, and duration
@@ -313,12 +321,14 @@ func (r *Router) listAgents(w http.ResponseWriter, req *http.Request) {
 
 func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 	var agent struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Image       string `json:"image"`
-		AgentType   string `json:"agentType"`
-		Endpoint    string `json:"endpoint"`
+		ID           string `json:"id"`
+		Name         string `json:"name"`
+		Description  string `json:"description"`
+		Image        string `json:"image"`
+		AgentType    string `json:"agentType"`
+		Endpoint     string `json:"endpoint"`
+		ModelID      string `json:"modelId"`
+		AuthConfigID string `json:"authConfigId"`
 	}
 
 	if err := json.NewDecoder(req.Body).Decode(&agent); err != nil {
@@ -366,17 +376,19 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 	}
 
 	newAgent := &store.Agent{
-		ID:          agent.ID,
-		Name:        agent.Name,
-		Description: agent.Description,
-		Image:       agent.Image,
-		AgentType:   agent.AgentType,
-		Endpoint:    agent.Endpoint,
-		Status:      status,
-		ListenPort:  listenPort,
-		BearerToken: token,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		ID:           agent.ID,
+		Name:         agent.Name,
+		Description:  agent.Description,
+		Image:        agent.Image,
+		AgentType:    agent.AgentType,
+		Endpoint:     agent.Endpoint,
+		Status:       status,
+		ListenPort:   listenPort,
+		BearerToken:  token,
+		ModelID:      agent.ModelID,
+		AuthConfigID: agent.AuthConfigID,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	if err := r.agentStore.Create(newAgent); err != nil {
@@ -451,6 +463,12 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 	if at, ok := updates["agentType"].(string); ok {
 		agent.AgentType = at
 	}
+	if mID, ok := updates["modelId"].(string); ok {
+		agent.ModelID = mID
+	}
+	if aID, ok := updates["authConfigId"].(string); ok {
+		agent.AuthConfigID = aID
+	}
 
 	if err := r.agentStore.Update(agent); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -495,9 +513,9 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 
 	ctx := req.Context()
 
-	// Resolve listen port from endpoint if not already set
+	// Resolve listen port for native agents if not already set
 	listenPort := agent.ListenPort
-	if listenPort == 0 && agent.Endpoint != "" {
+	if agent.AgentType == "native" && listenPort == 0 && agent.Endpoint != "" {
 		if u, err := url.Parse(agent.Endpoint); err == nil {
 			if p := u.Port(); p != "" {
 				listenPort, _ = strconv.Atoi(p)
@@ -509,11 +527,22 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 
 	// Create container if it doesn't exist
 	if agent.ContainerID == "" {
+		// Resolve portal URL for the container.
+		// If running in Docker, localhost:8080 won't work.
+		// For now, we use a special Docker DNS name 'host.docker.internal' which works
+		// on Docker Desktop (Mac/Windows) and can be configured for Linux.
+		// Podman also supports this or '172.17.0.1'.
+		portalURL := os.Getenv("PORTAL_INTERNAL_URL")
+		if portalURL == "" {
+			// Fallback to host.docker.internal which is common for dev environments
+			portalURL = "http://host.docker.internal:8080"
+		}
+
 		// Build container config
 		containerConfig := docker.ContainerConfig{
 			AgentID:     agent.ID,
 			AgentImage:  agent.Image,
-			PortalURL:   fmt.Sprintf("http://localhost:%d", 8080),
+			PortalURL:   portalURL,
 			PortalToken: agent.BearerToken,
 			ListenPort:  listenPort,
 		}
@@ -589,6 +618,8 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 			http.Error(w, fmt.Sprintf("Failed to create container: %v", err), http.StatusInternalServerError)
 			return
 		}
+
+		// Update agent with container ID
 		agent.ContainerID = containerID
 		r.agentStore.Update(agent)
 	}
@@ -688,15 +719,23 @@ func (r *Router) pingAgent(w http.ResponseWriter, req *http.Request, agentID str
 		return
 	}
 
-	if agent.Endpoint == "" {
+	endpoint := agent.Endpoint
+	if agent.AgentType == "docker" {
+		port := agent.ListenPort
+		if port == 0 {
+			port = 8080 // Default
+		}
+		endpoint = fmt.Sprintf("http://%s:%d", agent.ID, port)
+	}
+
+	if endpoint == "" {
 		http.Error(w, "Agent has no endpoint", http.StatusBadRequest)
 		return
 	}
 
 	// Try to reach the agent's well-known card
 	client := http.Client{Timeout: 5 * time.Second}
-	// Add slash if missing
-	endpoint := agent.Endpoint
+
 	if endpoint[len(endpoint)-1] != '/' {
 		endpoint += "/"
 	}
@@ -726,8 +765,20 @@ func (r *Router) streamAgentLogs(w http.ResponseWriter, req *http.Request, agent
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
+	var flusher http.Flusher
+	if f, ok := w.(http.Flusher); ok {
+		flusher = f
+	} else if rr, ok := w.(*responseRecorder); ok {
+		if f, ok := rr.ResponseWriter.(http.Flusher); ok {
+			flusher = f
+		}
+	}
+
 	// Send mock log data (when Docker SDK is implemented)
 	fmt.Fprintf(w, "data: Log streaming not yet implemented\n\n")
+	if flusher != nil {
+		flusher.Flush()
+	}
 }
 
 func (r *Router) streamAgents(w http.ResponseWriter, req *http.Request) {
@@ -736,8 +787,16 @@ func (r *Router) streamAgents(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	var flusher http.Flusher
+	if f, ok := w.(http.Flusher); ok {
+		flusher = f
+	} else if rr, ok := w.(*responseRecorder); ok {
+		if f, ok := rr.ResponseWriter.(http.Flusher); ok {
+			flusher = f
+		}
+	}
+
+	if flusher == nil {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
@@ -839,8 +898,16 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	var flusher http.Flusher
+	if f, ok := w.(http.Flusher); ok {
+		flusher = f
+	} else if rr, ok := w.(*responseRecorder); ok {
+		if f, ok := rr.ResponseWriter.(http.Flusher); ok {
+			flusher = f
+		}
+	}
+
+	if flusher == nil {
 		return
 	}
 
@@ -930,10 +997,19 @@ func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {
 
 	var result []a2a.AgentInfo
 	for _, a := range agents {
+		endpoint := a.Endpoint
+		if a.AgentType == "docker" {
+			port := a.ListenPort
+			if port == 0 {
+				port = 8080 // Default
+			}
+			endpoint = fmt.Sprintf("http://%s:%d", a.ID, port)
+		}
+
 		result = append(result, a2a.AgentInfo{
 			ID:          a.ID,
 			Name:        a.Name,
-			Endpoint:    a.Endpoint,
+			Endpoint:    endpoint,
 			BearerToken: a.BearerToken,
 		})
 	}

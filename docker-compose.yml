@@ -10,23 +10,16 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
+      - DB_PATH=/app/db/portal.db
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - AGENT_CONFIG_DIR=/app/agent-configs
+      - AGENT_CONFIG_DIR_HOST=${PWD}/agent-configs
+      - ENCRYPTION_KEY=7efc6f9f246692c44bc77b52404ba940
     volumes:
-      - ./bot-portal.db:/app/bot-portal.db
+      - ./db:/app/db
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./agent-configs:/app/agent-configs
     restart: unless-stopped
-    networks:
-      - bot-portal-network
-
-  # Mock agent for testing
-  mock-agent:
-    image: mock-agent:latest
-    container_name: mock-agent
-    ports:
-      - "9000:9000"
-    environment:
-      - PORT=9000
-      - AGENT_ID=mock-agent-1
     networks:
       - bot-portal-network
 

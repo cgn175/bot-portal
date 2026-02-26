@@ -20,7 +20,11 @@ func main() {
 	_ = godotenv.Load()
 
 	// Initialize SQLite store
-	db, err := store.NewSQLite("db/portal.db")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "db/portal.db"
+	}
+	db, err := store.NewSQLite(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}

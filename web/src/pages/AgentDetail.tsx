@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAgents } from '../contexts/AgentContext'
-import { api } from '../api/client'
+import { api, Model, AuthConfig } from '../api/client'
 import AgentForm from '../components/AgentForm'
 import Alert from '../components/Alert'
 import StatusBadge from '../components/StatusBadge'
@@ -17,6 +17,24 @@ export default function AgentDetail() {
   const [success, setSuccess] = useState('')
   const [pinging, setPinging] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
+  const [models, setModels] = useState<Model[]>([])
+  const [authConfigs, setAuthConfigs] = useState<AuthConfig[]>([])
+
+  useEffect(() => {
+    const loadMetadata = async () => {
+      try {
+        const [modelsData, authConfigsData] = await Promise.all([
+          api.listModels(),
+          api.listAuthConfigs()
+        ])
+        setModels(modelsData)
+        setAuthConfigs(authConfigsData)
+      } catch (err) {
+        console.error('Failed to load metadata in AgentDetail', err)
+      }
+    }
+    loadMetadata()
+  }, [])
 
   const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
     if (!id) return
@@ -98,6 +116,8 @@ export default function AgentDetail() {
   }
 
   const isDocker = agent.agentType === 'docker'
+  const selectedModel = models.find(m => m.id === agent.modelId)
+  const selectedAuth = authConfigs.find(c => c.id === agent.authConfigId)
 
   return (
     <div>
@@ -171,8 +191,45 @@ export default function AgentDetail() {
         <div style={{ display: 'grid', gap: '1.25rem' }}>
           <InfoRow label="Agent ID" value={<code>{agent.id}</code>} />
           <InfoRow label="Agent Type" value={<StatusBadge status={agent.agentType} />} />
-          <InfoRow label="Endpoint" value={<code>{agent.endpoint}</code>} />
+          {!isDocker && (
+            <InfoRow
+              label="Endpoint"
+              value={<code>{agent.endpoint || 'N/A'}</code>}
+            />
+          )}
           <InfoRow label="Docker Image" value={<code>{agent.image || 'N/A'}</code>} />
+          
+          <InfoRow 
+            label="Auth Provider" 
+            value={
+              selectedAuth ? (
+                <span>
+                  {selectedAuth.name}{' '}
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                    ({selectedAuth.authType === 'github_copilot_oauth' ? 'GitHub Copilot' : 'Custom'})
+                  </span>
+                </span>
+              ) : (
+                <span style={{ color: 'var(--color-text-muted)' }}>{agent.authConfigId || 'None'}</span>
+              )
+            } 
+          />
+
+          <InfoRow 
+            label="Model" 
+            value={
+              selectedModel ? (
+                <span>
+                  {selectedModel.name}{' '}
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                    ({selectedModel.modelIdentifier})
+                  </span>
+                </span>
+              ) : (
+                <span style={{ color: 'var(--color-text-muted)' }}>{agent.modelId || 'None'}</span>
+              )
+            } 
+          />
 
           {agent.bearer_token && (
             <div>

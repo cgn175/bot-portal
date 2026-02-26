@@ -28,19 +28,19 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
   const [fetchingDeps, setFetchingDeps] = useState(true)
 
   useEffect(() => {
-    if (agent) {
+    if (agent && !formData.id) {
       setFormData({
         id: agent.id,
         name: agent.name,
         image: agent.image,
         agentType: agent.agentType,
-        endpoint: agent.endpoint,
+        endpoint: agent.endpoint || '',
         description: agent.description || '',
         modelId: agent.modelId || '',
         authConfigId: agent.authConfigId || ''
       })
     }
-  }, [agent])
+  }, [agent, formData.id])
 
   useEffect(() => {
     // Load available models and auth configs
@@ -169,7 +169,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             type="text"
             required
             value={formData.id}
-            onChange={e => setFormData({ ...formData, id: e.target.value })}
+            onChange={e => setFormData(prev => ({ ...prev, id: e.target.value }))}
             placeholder="agent1"
             disabled={!!agent}
             className={error ? 'error' : ''}
@@ -185,7 +185,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             id="agentType"
             required
             value={formData.agentType}
-            onChange={e => setFormData({ ...formData, agentType: e.target.value as 'docker' | 'native' })}
+            onChange={e => setFormData(prev => ({ ...prev, agentType: e.target.value as 'docker' | 'native' }))}
           >
             <option value="docker">Docker Container</option>
             <option value="native">Native Process</option>
@@ -202,7 +202,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             type="text"
             required
             value={formData.name}
-            onChange={e => setFormData({ ...formData, name: e.target.value })}
+            onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
             placeholder="My AI Agent"
           />
           <small>Human-readable display name</small>
@@ -214,7 +214,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             id="description"
             rows={3}
             value={formData.description}
-            onChange={e => setFormData({ ...formData, description: e.target.value })}
+            onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
             placeholder="What does this agent do?"
           />
           <small>Optional description of the agent's purpose</small>
@@ -229,7 +229,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             type="text"
             required={formData.agentType === 'docker'}
             value={formData.image}
-            onChange={e => setFormData({ ...formData, image: e.target.value })}
+            onChange={e => setFormData(prev => ({ ...prev, image: e.target.value }))}
             placeholder="my-agent:latest"
             disabled={formData.agentType === 'native'}
           />
@@ -240,18 +240,22 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
           </small>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="endpoint">Endpoint *</label>
-          <input
-            id="endpoint"
-            type="text"
-            required
-            value={formData.endpoint}
-            onChange={e => setFormData({ ...formData, endpoint: e.target.value })}
-            placeholder="http://agent1:8080"
-          />
-          <small>Internal endpoint URL (use container name for Docker network)</small>
-        </div>
+        {formData.agentType === 'native' && (
+          <div className="form-group">
+            <label htmlFor="endpoint">Endpoint *</label>
+            <input
+              id="endpoint"
+              type="text"
+              required
+              value={formData.endpoint}
+              onChange={e => setFormData(prev => ({ ...prev, endpoint: e.target.value }))}
+              placeholder="http://localhost:8081"
+            />
+            <small>
+              The URL where the native agent is listening
+            </small>
+          </div>
+        )}
 
         <div className="form-group">
           <label htmlFor="authConfigId">Auth Provider *</label>
@@ -261,7 +265,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             value={formData.authConfigId || ''}
             onChange={e => {
               const configId = e.target.value
-              setFormData({ ...formData, authConfigId: configId, modelId: '' })
+              setFormData(prev => ({ ...prev, authConfigId: configId, modelId: '' }))
             }}
           >
             <option value="">— Select provider —</option>
@@ -280,7 +284,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             id="modelId"
             required
             value={formData.modelId || ''}
-            onChange={e => setFormData({ ...formData, modelId: e.target.value })}
+            onChange={e => setFormData(prev => ({ ...prev, modelId: e.target.value }))}
             disabled={!formData.authConfigId}
           >
             <option value="">{formData.authConfigId ? '— Select model —' : '— Select a provider first —'}</option>

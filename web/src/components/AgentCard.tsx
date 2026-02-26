@@ -35,12 +35,6 @@ function AgentCard({ agent, onDelete, onAction }: AgentCardProps) {
           <span style={{ color: 'var(--color-text-subtle)', minWidth: '70px' }}>ID:</span>
           <code>{agent.id}</code>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <span style={{ color: 'var(--color-text-subtle)', minWidth: '70px' }}>Endpoint:</span>
-          <code style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {agent.endpoint}
-          </code>
-        </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <span style={{ color: 'var(--color-text-subtle)', minWidth: '70px' }}>Image:</span>
           <code style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

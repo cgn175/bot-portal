@@ -1,6 +1,9 @@
 package docker
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -278,4 +281,139 @@ func TestBuildEnvironmentVars_EmptyEndpoint(t *testing.T) {
 	if envMap["API_KEY"] != "key123" {
 		t.Errorf("Expected API_KEY=key123, got %s", envMap["API_KEY"])
 	}
+}
+
+func TestResolveDockerContextHost(t *testing.T) {
+	// Create a temporary home directory
+	tempHome, err := os.MkdirTemp("", "docker-test-home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempHome)
+
+	// Save original HOME and restore it later
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempHome)
+	defer os.Setenv("HOME", originalHome)
+
+	t.Run("Default - No config.json", func(t *testing.T) {
+		// Ensure no Podman socks exist in the search paths during this test
+		// Or just skip checking if we are on a system where one actually exists in TmpDir
+		host := resolveDockerContextHost()
+		if host != "" && !strings.Contains(host, "podman") {
+			t.Errorf("Expected empty host or podman fallback, got %s", host)
+		}
+	})
+
+	t.Run("Podman Fallback", func(t *testing.T) {
+		podmanSockDir := filepath.Join(tempHome, ".local/share/containers/podman/machine/qemu")
+		if err := os.MkdirAll(podmanSockDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		podmanSock := filepath.Join(podmanSockDir, "podman.sock")
+		if err := os.WriteFile(podmanSock, []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		host := resolveDockerContextHost()
+		expected := "unix://" + podmanSock
+		if host != expected {
+			t.Errorf("Expected %s, got %s", expected, host)
+		}
+
+		// Test XDG_RUNTIME_DIR
+		os.Remove(podmanSock)
+		xdgDir, _ := os.MkdirTemp("", "xdg-test")
+		defer os.RemoveAll(xdgDir)
+		os.Setenv("XDG_RUNTIME_DIR", xdgDir)
+		defer os.Unsetenv("XDG_RUNTIME_DIR")
+
+		xdgPodmanDir := filepath.Join(xdgDir, "podman")
+		os.MkdirAll(xdgPodmanDir, 0755)
+		xdgSock := filepath.Join(xdgPodmanDir, "podman.sock")
+		os.WriteFile(xdgSock, []byte(""), 0644)
+
+		host = resolveDockerContextHost()
+		if host != "unix://"+xdgSock {
+			t.Errorf("Expected unix://%s, got %s", xdgSock, host)
+		}
+	})
+
+	t.Run("Docker Context", func(t *testing.T) {
+		// Set up docker config
+		dockerDir := filepath.Join(tempHome, ".docker")
+		if err := os.MkdirAll(dockerDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		config := map[string]string{"currentContext": "test-context"}
+		configData, _ := json.Marshal(config)
+		if err := os.WriteFile(filepath.Join(dockerDir, "config.json"), configData, 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set up context meta
+		metaDir := filepath.Join(dockerDir, "contexts", "meta", "somehash")
+		if err := os.MkdirAll(metaDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		meta := map[string]interface{}{
+			"Name": "test-context",
+			"Endpoints": map[string]interface{}{
+				"docker": map[string]string{
+					"Host": "unix:///tmp/test.sock",
+				},
+			},
+		}
+		metaData, _ := json.Marshal(meta)
+		if err := os.WriteFile(filepath.Join(metaDir, "meta.json"), metaData, 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		host := "unix:///tmp/test.sock"
+		socketPath := "/tmp/test.sock"
+		if err := os.WriteFile(socketPath, []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(socketPath)
+
+		resolvedHost := resolveDockerContextHost()
+		if resolvedHost != host {
+			t.Errorf("Expected %s, got %s", host, resolvedHost)
+		}
+	})
+
+	t.Run("Broken Docker Context Fallback to Podman", func(t *testing.T) {
+		// Set up docker config with broken context
+		dockerDir := filepath.Join(tempHome, ".docker")
+		os.MkdirAll(dockerDir, 0755)
+		config := map[string]string{"currentContext": "broken-context"}
+		configData, _ := json.Marshal(config)
+		os.WriteFile(filepath.Join(dockerDir, "config.json"), configData, 0644)
+
+		// Set up context meta pointing to non-existent file
+		metaDir := filepath.Join(dockerDir, "contexts", "meta", "brokenhash")
+		os.MkdirAll(metaDir, 0755)
+		meta := map[string]interface{}{
+			"Name": "broken-context",
+			"Endpoints": map[string]interface{}{
+				"docker": map[string]string{
+					"Host": "unix:///non/existent/sock",
+				},
+			},
+		}
+		metaData, _ := json.Marshal(meta)
+		os.WriteFile(filepath.Join(metaDir, "meta.json"), metaData, 0644)
+
+		// Set up working Podman fallback
+		podmanSockDir := filepath.Join(tempHome, ".local/share/containers/podman/machine/qemu")
+		os.MkdirAll(podmanSockDir, 0755)
+		podmanSock := filepath.Join(podmanSockDir, "podman.sock")
+		os.WriteFile(podmanSock, []byte(""), 0644)
+
+		host := resolveDockerContextHost()
+		expected := "unix://" + podmanSock
+		if host != expected {
+			t.Errorf("Expected fallback to Podman %s, got %s", expected, host)
+		}
+	})
 }

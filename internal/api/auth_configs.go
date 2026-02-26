@@ -129,7 +129,23 @@ func (r *Router) createAuthConfig(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Auto-discover and save models from this provider
-	go r.discoverAndSaveModels(config)
+	// Fetch from store to get decrypted credentials, then run discovery async
+	if !r.skipModelDiscovery {
+		go func(configID string) {
+			log.Printf("[model-discovery] goroutine started for %s", configID)
+			cfg, err := r.authConfigStore.GetByID(configID)
+			if err != nil {
+				log.Printf("[model-discovery] failed to get auth config %s: %v", configID, err)
+				return
+			}
+			if cfg == nil {
+				log.Printf("[model-discovery] auth config %s not found (nil)", configID)
+				return
+			}
+			log.Printf("[model-discovery] successfully fetched config %s, starting discovery", configID)
+			r.discoverAndSaveModels(cfg)
+		}(config.ID)
+	}
 
 	// Return the config with masked credentials
 	maskedConfig := maskCredentialsInConfig(config)
@@ -216,7 +232,23 @@ func (r *Router) updateAuthConfig(w http.ResponseWriter, req *http.Request, conf
 	}
 
 	// Auto-discover and save models from this provider
-	go r.discoverAndSaveModels(config)
+	// Fetch from store to get decrypted credentials, then run discovery async
+	if !r.skipModelDiscovery {
+		go func(configID string) {
+			log.Printf("[model-discovery] goroutine started for %s", configID)
+			cfg, err := r.authConfigStore.GetByID(configID)
+			if err != nil {
+				log.Printf("[model-discovery] failed to get auth config %s: %v", configID, err)
+				return
+			}
+			if cfg == nil {
+				log.Printf("[model-discovery] auth config %s not found (nil)", configID)
+				return
+			}
+			log.Printf("[model-discovery] successfully fetched config %s, starting discovery", configID)
+			r.discoverAndSaveModels(cfg)
+		}(config.ID)
+	}
 
 	// Return the config with masked credentials
 	maskedConfig := maskCredentialsInConfig(config)
@@ -260,6 +292,118 @@ func (r *Router) deleteAuthConfig(w http.ResponseWriter, req *http.Request, conf
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// modelsResponse represents the standard OpenAI-compatible /models response
+type modelsResponse struct {
+	Data []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"data"`
+}
+
+// discoverModels fetches available models from an auth config's provider endpoint.
+// It handles auth type differences (github_copilot_oauth vs bearer_token) and
+// tries multiple URL patterns (/models, /v1/models) to find the models endpoint.
+// Returns the parsed response, the effective provider ID used, the baseURL used, and any error.
+func (r *Router) discoverModels(config *models.AuthConfig) (*modelsResponse, string, string, error) {
+	var creds map[string]string
+	if err := json.Unmarshal([]byte(config.Credentials), &creds); err != nil {
+		return nil, "", "", fmt.Errorf("failed to parse credentials: %w", err)
+	}
+
+	// Debug: log available credential keys
+	var credKeys []string
+	for k := range creds {
+		credKeys = append(credKeys, k)
+	}
+	log.Printf("[discover-models] auth config %s has credential keys: %v", config.ID, credKeys)
+
+	// Determine token, baseURL, and provider based on auth type
+	var token, baseURL, providerID string
+	if config.AuthType == "github_copilot_oauth" {
+		token = creds["copilot_api_key"]
+		if token == "" {
+			token = creds["access_token"]
+		}
+		baseURL = config.EndpointURL
+		if baseURL == "" {
+			baseURL = "https://api.githubcopilot.com"
+		}
+		providerID = "copilot"
+	} else {
+		token = creds["api_key"]
+		baseURL = strings.TrimRight(config.EndpointURL, "/")
+		providerID = config.Provider
+	}
+
+	if token == "" {
+		log.Printf("[discover-models] no API key found for %s (checked api_key/access_token/copilot_api_key)", config.ID)
+		return nil, "", "", fmt.Errorf("no API key / token found in auth config")
+	}
+	if baseURL == "" {
+		return nil, "", "", fmt.Errorf("no endpoint URL configured")
+	}
+
+	// Debug: log token preview
+	tokenPreview := ""
+	if len(token) > 8 {
+		tokenPreview = token[:4] + "..." + token[len(token)-4:] + fmt.Sprintf("(len=%d)", len(token))
+	} else if len(token) > 0 {
+		tokenPreview = fmt.Sprintf("[short token: len=%d]", len(token))
+	} else {
+		tokenPreview = "[empty]"
+	}
+	log.Printf("[discover-models] using token for %s: %s, baseURL: %s", config.ID, tokenPreview, baseURL)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	// Build candidate URLs to try
+	var urls []string
+	if config.AuthType == "github_copilot_oauth" {
+		urls = []string{baseURL + "/models"}
+	} else {
+		urls = []string{baseURL + "/models", baseURL + "/v1/models"}
+	}
+
+	for _, u := range urls {
+		req, err := http.NewRequest(http.MethodGet, u, nil)
+		if err != nil {
+			continue
+		}
+		authHeaderName, authHeaderValue := provider.GetAuthHeader(providerID, token)
+		log.Printf("[discover-models] setting %s header for %s: %s... (length: %d)", authHeaderName, config.ID, token[:min(10, len(token))], len(authHeaderValue))
+		req.Header.Set(authHeaderName, authHeaderValue)
+		req.Header.Set("Accept", "application/json")
+
+		// Apply provider-specific headers from registry
+		applyProviderHeaders(req, providerID, baseURL)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[discover-models] non-OK status for %s (%s): %d, body: %s", config.ID, u, resp.StatusCode, string(bodyBytes))
+			continue
+		}
+		log.Printf("[discover-models] got OK response from %s (%s), body length: %d", config.ID, u, len(bodyBytes))
+
+		var modelsResp modelsResponse
+		if err := json.Unmarshal(bodyBytes, &modelsResp); err != nil {
+			log.Printf("[discover-models] failed to decode models response for %s (%s): %v, body: %s", config.ID, u, err, string(bodyBytes))
+			continue
+		}
+
+		return &modelsResp, providerID, baseURL, nil
+	}
+
+	log.Printf("[discover-models] could not fetch models for auth config %s - exhausted all URLs", config.ID)
+	return nil, "", "", fmt.Errorf("could not fetch models from any known endpoint path")
+}
+
 // handleDiscoverModels fetches available models from an auth config's endpoint.
 // For copilot configs, it uses the copilot API. For custom/bearer configs, it
 // tries {endpointUrl}/models then {endpointUrl}/v1/models.
@@ -285,97 +429,14 @@ func (r *Router) handleDiscoverModels(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	var creds map[string]string
-	if err := json.Unmarshal([]byte(config.Credentials), &creds); err != nil {
-		http.Error(w, "Failed to parse credentials", http.StatusInternalServerError)
+	modelsResp, _, _, err := r.discoverModels(config)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 
-	// Debug: log available credential keys
-	var credKeys []string
-	for k := range creds {
-		credKeys = append(credKeys, k)
-	}
-	log.Printf("[discover-models] auth config %s has credential keys: %v", config.ID, credKeys)
-
-	// Determine token and URL based on auth type
-	var token, baseURL, discoverProvider string
-	if config.AuthType == "github_copilot_oauth" {
-		// Use the Copilot API key (not the GitHub access token)
-		token = creds["copilot_api_key"]
-		if token == "" {
-			// Fallback to access_token for backwards compatibility
-			token = creds["access_token"]
-		}
-		baseURL = config.EndpointURL
-		if baseURL == "" {
-			baseURL = "https://api.githubcopilot.com"
-		}
-		discoverProvider = "copilot"
-	} else {
-		token = creds["api_key"]
-		baseURL = strings.TrimRight(config.EndpointURL, "/")
-		discoverProvider = config.Provider
-	}
-
-	if token == "" {
-		log.Printf("[discover-models] no API key found for %s (checked api_key/access_token/copilot_api_key)", config.ID)
-		http.Error(w, "No API key / token found in auth config", http.StatusBadRequest)
-		return
-	}
-	if baseURL == "" {
-		http.Error(w, "No endpoint URL configured", http.StatusBadRequest)
-		return
-	}
-
-	// Debug: log token preview
-	tokenPreview := ""
-	if len(token) > 8 {
-		tokenPreview = token[:4] + "..." + token[len(token)-4:] + fmt.Sprintf("(len=%d)", len(token))
-	} else if len(token) > 0 {
-		tokenPreview = fmt.Sprintf("[short token: len=%d]", len(token))
-	} else {
-		tokenPreview = "[empty]"
-	}
-	log.Printf("[discover-models] using token for %s: %s, baseURL: %s", config.ID, tokenPreview, baseURL)
-
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	// Build candidate URLs to try
-	var urls []string
-	if config.AuthType == "github_copilot_oauth" {
-		urls = []string{baseURL + "/models"}
-	} else {
-		// Try /models first (already includes /v1), then /v1/models as fallback
-		urls = []string{baseURL + "/models", baseURL + "/v1/models"}
-	}
-
-	for _, u := range urls {
-		modelsReq, err := http.NewRequest(http.MethodGet, u, nil)
-		if err != nil {
-			continue
-		}
-		authHeaderName, authHeaderValue := provider.GetAuthHeader(discoverProvider, token)
-		modelsReq.Header.Set(authHeaderName, authHeaderValue)
-		modelsReq.Header.Set("Accept", "application/json")
-
-		// Apply provider-specific headers from registry
-		applyProviderHeaders(modelsReq, discoverProvider, baseURL)
-
-		resp, err := client.Do(modelsReq)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			w.Header().Set("Content-Type", "application/json")
-			io.Copy(w, resp.Body)
-			return
-		}
-	}
-
-	http.Error(w, "Could not fetch models from any known endpoint path", http.StatusBadGateway)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(modelsResp)
 }
 
 // ============================================================================
@@ -384,164 +445,41 @@ func (r *Router) handleDiscoverModels(w http.ResponseWriter, req *http.Request) 
 
 // discoverAndSaveModels fetches available models from an auth config's provider
 // and saves them to the database. Duplicate model IDs are silently skipped.
+// The config should already have decrypted credentials (fetched from store before calling this).
 func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 	log.Printf("[model-discovery] starting discovery for auth config %s (provider: %s, authType: %s)", config.ID, config.Provider, config.AuthType)
 
-	var creds map[string]string
-	if err := json.Unmarshal([]byte(config.Credentials), &creds); err != nil {
-		log.Printf("[model-discovery] failed to parse credentials for %s: %v", config.ID, err)
-		return
-	}
-	log.Printf("[model-discovery] credentials parsed successfully for %s, keys: %v", config.ID, getMapKeys(creds))
-
-	// Debug: log all credential values (safely)
-	for k, v := range creds {
-		preview := "[empty]"
-		if len(v) > 0 {
-			if len(v) <= 8 {
-				preview = "[short:" + fmt.Sprintf("%d", len(v)) + "]"
-			} else {
-				preview = v[:4] + "..." + v[len(v)-4:] + fmt.Sprintf("(%d)", len(v))
-			}
-		}
-		log.Printf("[model-discovery] credential %s for %s: %s", k, config.ID, preview)
-	}
-
-	var token, baseURL, providerID string
-	if config.AuthType == "github_copilot_oauth" {
-		// Use the Copilot API key (not the GitHub access token)
-		token = creds["copilot_api_key"]
-		if token == "" {
-			// Fallback to access_token for backwards compatibility with old configs
-			token = creds["access_token"]
-		}
-		baseURL = config.EndpointURL
-		if baseURL == "" {
-			baseURL = "https://api.githubcopilot.com"
-		}
-		providerID = "copilot"
-	} else {
-		token = creds["api_key"]
-		baseURL = strings.TrimRight(config.EndpointURL, "/")
-		providerID = config.Provider
-	}
-
-	if token == "" {
-		log.Printf("[model-discovery] no API token found for %s (checked api_key/access_token)", config.ID)
-		return
-	}
-	if baseURL == "" {
-		log.Printf("[model-discovery] no endpoint URL configured for %s", config.ID)
-		return
-	}
-	// Log first/last 4 chars of token for debugging (be careful not to log full token)
-	tokenPreview := ""
-	if len(token) > 8 {
-		tokenPreview = token[:4] + "..." + token[len(token)-4:]
-	} else if len(token) > 0 {
-		tokenPreview = "[token too short]"
-	}
-	log.Printf("[model-discovery] config %s: baseURL=%s, provider=%s, token_length=%d, token_preview=%s", config.ID, baseURL, providerID, len(token), tokenPreview)
-
-	// Check if token already has bearer prefix (would cause "Bearer bearer ..." issue)
-	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
-		log.Printf("[model-discovery] WARNING: token for %s appears to already have 'bearer ' prefix!", config.ID)
-	}
-
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	var urls []string
-	if config.AuthType == "github_copilot_oauth" {
-		urls = []string{baseURL + "/models"}
-	} else {
-		urls = []string{baseURL + "/models", baseURL + "/v1/models"}
-	}
-	log.Printf("[model-discovery] will try URLs for %s: %v", config.ID, urls)
-
-	for _, u := range urls {
-		log.Printf("[model-discovery] trying URL for %s: %s", config.ID, u)
-
-		req, err := http.NewRequest(http.MethodGet, u, nil)
-		if err != nil {
-			log.Printf("[model-discovery] failed to create request for %s (%s): %v", config.ID, u, err)
-			continue
-		}
-		authHeaderName, authHeaderValue := provider.GetAuthHeader(providerID, token)
-		if config.AuthType == "github_copilot_oauth" {
-			// Log what we're sending (mask the token)
-			log.Printf("[model-discovery] setting %s header for %s: %s... (length: %d)", authHeaderName, config.ID, token[:min(10, len(token))], len(authHeaderValue))
-		}
-		req.Header.Set(authHeaderName, authHeaderValue)
-		req.Header.Set("Accept", "application/json")
-
-		// Apply provider-specific headers from registry
-		applyProviderHeaders(req, providerID, baseURL)
-
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Printf("[model-discovery] HTTP request failed for %s (%s): %v", config.ID, u, err)
-			continue
-		}
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("[model-discovery] non-OK status for %s (%s): %d, body: %s", config.ID, u, resp.StatusCode, string(bodyBytes))
-			continue
-		}
-
-		log.Printf("[model-discovery] got OK response from %s (%s), body length: %d", config.ID, u, len(bodyBytes))
-
-		var modelsResp struct {
-			Data []struct {
-				ID   string `json:"id"`
-				Name string `json:"name"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &modelsResp); err != nil {
-			log.Printf("[model-discovery] failed to decode models response for %s (%s): %v, body: %s", config.ID, u, err, string(bodyBytes))
-			continue
-		}
-
-		log.Printf("[model-discovery] parsed %d models from %s (%s)", len(modelsResp.Data), config.ID, u)
-
-		now := time.Now()
-		saved := 0
-		for _, m := range modelsResp.Data {
-			name := m.Name
-			if name == "" {
-				name = m.ID
-			}
-			model := &models.Model{
-				ID:              m.ID,
-				Name:            name,
-				Provider:        providerID,
-				ModelIdentifier: m.ID,
-				EndpointURL:     baseURL,
-				CreatedAt:       now,
-				UpdatedAt:       now,
-			}
-			if err := r.modelStore.Create(model); err != nil {
-				// Skip duplicates silently
-				continue
-			}
-			saved++
-		}
-		log.Printf("[model-discovery] saved %d new models from %s (provider: %s)", saved, config.ID, providerID)
+	modelsResp, providerID, baseURL, err := r.discoverModels(config)
+	if err != nil {
+		log.Printf("[model-discovery] failed to discover models for %s: %v", config.ID, err)
 		return
 	}
 
-	log.Printf("[model-discovery] could not fetch models for auth config %s - exhausted all URLs", config.ID)
-}
+	log.Printf("[model-discovery] parsed %d models from %s", len(modelsResp.Data), config.ID)
 
-// getMapKeys returns a slice of map keys for logging
-func getMapKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	now := time.Now()
+	saved := 0
+	for _, m := range modelsResp.Data {
+		name := m.Name
+		if name == "" {
+			name = m.ID
+		}
+		model := &models.Model{
+			ID:              m.ID,
+			Name:            name,
+			Provider:        providerID,
+			ModelIdentifier: m.ID,
+			EndpointURL:     baseURL,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		if err := r.modelStore.Create(model); err != nil {
+			// Skip duplicates silently
+			continue
+		}
+		saved++
 	}
-	return keys
+	log.Printf("[model-discovery] saved %d new models from %s (provider: %s)", saved, config.ID, providerID)
 }
 
 // applyProviderHeaders sets provider-specific headers on the request

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -42,9 +43,9 @@ type AccessTokenResponse struct {
 
 // CopilotAPIKeyResponse represents the response from GitHub's Copilot token endpoint
 type CopilotAPIKeyResponse struct {
-	Token     string            `json:"token"`
-	ExpiresAt int64             `json:"expires_at"`
-	Endpoints CopilotEndpoints  `json:"endpoints"`
+	Token     string           `json:"token"`
+	ExpiresAt int64            `json:"expires_at"`
+	Endpoints CopilotEndpoints `json:"endpoints"`
 }
 
 // CopilotEndpoints represents the API endpoints in the Copilot token response
@@ -230,15 +231,17 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Auto-discover and save models from copilot
-	savedConfig := &models.AuthConfig{
-		ID:          configID,
-		Name:        configName,
-		Provider:    GitHubCopilotProvider,
-		AuthType:    GitHubCopilotAuthType,
-		Credentials: string(credentialsJSON),
-		EndpointURL: apiEndpoint,
+	// Fetch from store to get decrypted credentials, then run discovery async
+	if !r.skipModelDiscovery {
+		go func(id string) {
+			cfg, err := r.authConfigStore.GetByID(id)
+			if err != nil || cfg == nil {
+				log.Printf("[model-discovery] failed to get copilot auth config %s: %v", id, err)
+				return
+			}
+			r.discoverAndSaveModels(cfg)
+		}(configID)
 	}
-	go r.discoverAndSaveModels(savedConfig)
 
 	// Return success response
 	result := TokenResult{

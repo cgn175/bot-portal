@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25.4-alpine AS builder
 
 WORKDIR /app
 
@@ -27,8 +27,8 @@ RUN apk --no-cache add ca-certificates
 # Copy binary from builder
 COPY --from=builder /app/bot-portal .
 
-# Create empty database file
-RUN touch bot-portal.db
+# Create empty database file and config dir
+RUN mkdir -p db agent-configs && touch db/portal.db
 
 EXPOSE 8080
 

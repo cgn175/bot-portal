@@ -1,6 +1,6 @@
 # Bot Portal
 
-A web portal for managing multiple AI agents running as Docker containers. Serves as an A2A (Agent-to-Agent) message router with channel-based communication, message logging, and agent lifecycle management.
+A web portal for managing multiple AI agents running as Docker or Podman containers. Serves as an A2A (Agent-to-Agent) message router with channel-based communication, message logging, and agent lifecycle management.
 
 ## Features
 
@@ -8,7 +8,7 @@ A web portal for managing multiple AI agents running as Docker containers. Serve
 - **A2A Message Router**: Route messages between agents using Google A2A protocol
 - **Channel-based Communication**: Direct channels (agent1::agent2) and broadcast (general)
 - **Message Logging**: Persistent task logs with full conversation history
-- **Docker Integration**: Automatic container lifecycle management
+- **Docker & Podman Integration**: Automatic container lifecycle management with support for Docker Desktop and Podman Machine
 - **Bearer Token Auth**: Secure agent-to-agent authentication
 - **Central Model Store**: Manage shared AI model configurations across agents
 - **Authentication Store**: Secure API key and credential management encrypted at rest
@@ -49,7 +49,7 @@ A web portal for managing multiple AI agents running as Docker containers. Serve
 ### Prerequisites
 
 - Go 1.21+
-- Docker
+- Docker or Podman
 - Node.js 18+ (for frontend)
 
 ### Installation
@@ -67,6 +67,16 @@ make build
 ```
 
 The portal will start on `http://localhost:8080`
+
+### Running with Docker (Recommended)
+
+To ensure the portal can correctly communicate with agents in their isolated networks (for "Test Connection" and task routing), it is recommended to run the portal itself in a container within the same network.
+
+```bash
+docker-compose up -d
+```
+
+This will start the portal and its required infrastructure. The portal will be accessible at `http://localhost:8080`.
 
 ## Supported AI Providers
 
