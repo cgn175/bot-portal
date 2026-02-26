@@ -58,7 +58,7 @@ func main() {
 	}
 
 	log.Printf("Starting Bot Portal on port %s", port)
-	if err := router.Run(":" + port); err != nil {
+	if err := router.Run("0.0.0.0:" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
