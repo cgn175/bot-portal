@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -8,11 +9,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
@@ -56,6 +59,7 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	a2aRouter.CreateTask = router.createTask
 	a2aRouter.GetTask = router.getTask
 	a2aRouter.UpdateTaskStatus = router.updateTaskStatus
+	a2aRouter.AppendMessage = router.appendMessage
 	a2aRouter.GetAgents = router.getAgentsForRouting
 	router.a2aRouter = a2aRouter
 
@@ -253,6 +257,9 @@ func (r *Router) handleTaskDetail(w http.ResponseWriter, req *http.Request) {
 		// Check for cancel
 		if req.URL.RawQuery == "cancel" {
 			r.a2aRouter.HandleTaskCancel(w, req)
+		} else {
+			// Handle task update (agents sending responses)
+			r.a2aRouter.HandleTaskUpdate(w, req)
 		}
 	} else {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -816,7 +823,7 @@ func (r *Router) handleAgentChat(w http.ResponseWriter, req *http.Request, agent
 		return
 	}
 
-	// Forward task to agent (portal -> agent)
+	// Forward task to agent (portal -> agent) and subscribe to SSE stream
 	go func() {
 		url := fmt.Sprintf("%s/tasks", agent.Endpoint)
 		createReq := a2a.CreateTaskRequest{
@@ -843,6 +850,16 @@ func (r *Router) handleAgentChat(w http.ResponseWriter, req *http.Request, agent
 		}
 		defer resp.Body.Close()
 		log.Printf("Chat task %s forwarded to agent %s, status: %d", taskID, agent.ID, resp.StatusCode)
+
+		if resp.StatusCode >= 400 {
+			respBody, _ := io.ReadAll(resp.Body)
+			log.Printf("Agent %s returned error: %s", agent.ID, string(respBody))
+			r.updateTaskStatus(taskID, string(a2a.TaskStatusFailed))
+			return
+		}
+
+		// Subscribe to agent's SSE stream to receive responses
+		r.subscribeToAgentSSE(agent, taskID)
 	}()
 
 	// For now, let's just return the task ID.
@@ -1077,6 +1094,72 @@ func (r *Router) updateTaskStatus(id, status string) error {
 	taskLog.UpdatedAt = time.Now()
 
 	return r.messageStore.Update(taskLog)
+}
+
+func (r *Router) appendMessage(id string, message a2a.TaskMessage) error {
+	return r.messageStore.AppendMessage(id, message)
+}
+
+// subscribeToAgentSSE connects to the agent's SSE stream and processes updates
+func (r *Router) subscribeToAgentSSE(agent *store.Agent, taskID string) {
+	streamURL := fmt.Sprintf("%s/tasks/%s/stream", agent.Endpoint, taskID)
+	log.Printf("Subscribing to SSE stream for task %s from agent %s", taskID, agent.ID)
+
+	req, err := http.NewRequest("GET", streamURL, nil)
+	if err != nil {
+		log.Printf("Failed to create SSE request for task %s: %v", taskID, err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+agent.BearerToken)
+	req.Header.Set("Accept", "text/event-stream")
+
+	client := &http.Client{Timeout: 0} // No timeout for SSE
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to connect to SSE stream for task %s: %v", taskID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("SSE stream returned status %d for task %s", resp.StatusCode, taskID)
+		return
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("SSE stream error for task %s: %v", taskID, err)
+			}
+			break
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			log.Printf("Received SSE event for task %s: %s", taskID, data)
+
+			var update a2a.TaskUpdate
+			if err := json.Unmarshal([]byte(data), &update); err == nil {
+				if update.Status != "" {
+					r.updateTaskStatus(taskID, string(update.Status))
+				}
+				if update.Message != nil && update.Message.Content != "" {
+					r.appendMessage(taskID, *update.Message)
+				}
+				if update.Status == a2a.TaskStatusCompleted || update.Status == a2a.TaskStatusFailed {
+					log.Printf("Task %s finished with status: %s", taskID, update.Status)
+					return
+				}
+			}
+		}
+	}
 }
 
 func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {

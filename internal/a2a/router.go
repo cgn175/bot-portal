@@ -1,9 +1,11 @@
 package a2a
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -17,6 +19,7 @@ type Router struct {
 	CreateTask       func(channelID, senderID, recipientID string, message TaskMessage) (string, error)
 	GetTask          func(id string) (*Task, error)
 	UpdateTaskStatus func(id, status string) error
+	AppendMessage    func(id string, message TaskMessage) error
 	GetAgents        func() ([]AgentInfo, error)
 	GetAgent         func(id string) (*AgentInfo, error)
 
@@ -185,6 +188,58 @@ func (r *Router) HandleTaskCancel(w http.ResponseWriter, req *http.Request) {
 	http.Error(w, "store not configured", http.StatusInternalServerError)
 }
 
+// UpdateTaskRequest represents a request to update a task with a response
+type UpdateTaskRequest struct {
+	Message TaskMessage `json:"message"`
+	Status  TaskStatus  `json:"status,omitempty"`
+}
+
+// HandleTaskUpdate handles POST /tasks/{id} - agents update tasks with responses
+func (r *Router) HandleTaskUpdate(w http.ResponseWriter, req *http.Request) {
+	taskID, _ := req.Context().Value("taskID").(string)
+
+	var updateReq UpdateTaskRequest
+	if err := json.NewDecoder(req.Body).Decode(&updateReq); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Get sender from header
+	senderID := req.Header.Get("X-Agent-ID")
+	if senderID == "" {
+		senderID = "unknown"
+	}
+
+	// Append the message to the task
+	if r.AppendMessage != nil && updateReq.Message.Content != "" {
+		if err := r.AppendMessage(taskID, updateReq.Message); err != nil {
+			http.Error(w, fmt.Sprintf("failed to append message: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Update status if provided
+	if r.UpdateTaskStatus != nil && updateReq.Status != "" {
+		if err := r.UpdateTaskStatus(taskID, string(updateReq.Status)); err != nil {
+			http.Error(w, fmt.Sprintf("failed to update status: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Broadcast status update via SSE
+		r.broadcastUpdate(taskID, &TaskUpdate{
+			TaskID:  taskID,
+			Status:  updateReq.Status,
+			Message: &updateReq.Message,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"task_id": taskID,
+		"status":  "updated",
+	})
+}
+
 // HandleAgentCard handles GET /.well-known/agent.json
 func (r *Router) HandleAgentCard(w http.ResponseWriter, req *http.Request) {
 	card := AgentCard{
@@ -242,8 +297,9 @@ func (r *Router) forwardTask(channelID, senderID, taskID string, req CreateTaskR
 	}
 }
 
-// sendTaskToAgent sends a task to a specific agent
+// sendTaskToAgent sends a task to a specific agent and subscribes to its SSE stream
 func (r *Router) sendTaskToAgent(agent *AgentInfo, taskID string, req CreateTaskRequest) {
+	// Step 1: Send the task to the agent
 	url := fmt.Sprintf("%s/tasks", agent.Endpoint)
 
 	body, _ := json.Marshal(req)
@@ -252,6 +308,8 @@ func (r *Router) sendTaskToAgent(agent *AgentInfo, taskID string, req CreateTask
 	httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 	httpReq.Header.Set("Authorization", "Bearer "+agent.BearerToken)
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Agent-ID", "portal")
+	httpReq.Header.Set("X-Channel-ID", ChannelID("portal", agent.ID))
 
 	resp, err := r.client.Do(httpReq)
 	if err != nil {
@@ -260,7 +318,100 @@ func (r *Router) sendTaskToAgent(agent *AgentInfo, taskID string, req CreateTask
 	}
 	defer resp.Body.Close()
 
-	log.Printf("Task %s forwarded to agent %s", taskID, agent.ID)
+	log.Printf("Task %s forwarded to agent %s, status: %d", taskID, agent.ID, resp.StatusCode)
+
+	// Read response body for debugging
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("Agent %s returned error: %s", agent.ID, string(respBody))
+		if r.UpdateTaskStatus != nil {
+			r.UpdateTaskStatus(taskID, string(TaskStatusFailed))
+		}
+		return
+	}
+
+	// Step 2: Subscribe to the agent's SSE stream to receive responses
+	go r.subscribeToAgentStream(agent, taskID)
+}
+
+// subscribeToAgentStream connects to the agent's SSE stream and processes updates
+func (r *Router) subscribeToAgentStream(agent *AgentInfo, taskID string) {
+	streamURL := fmt.Sprintf("%s/tasks/stream/%s", agent.Endpoint, taskID)
+	log.Printf("Subscribing to SSE stream for task %s from agent %s", taskID, agent.ID)
+
+	// Create request with headers
+	req, err := http.NewRequest("GET", streamURL, nil)
+	if err != nil {
+		log.Printf("Failed to create SSE request for task %s: %v", taskID, err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+agent.BearerToken)
+	req.Header.Set("Accept", "text/event-stream")
+
+	// Make the request
+	resp, err := r.client.Do(req)
+	if err != nil {
+		log.Printf("Failed to connect to SSE stream for task %s: %v", taskID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("SSE stream returned status %d for task %s", resp.StatusCode, taskID)
+		return
+	}
+
+	// Read SSE events
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("SSE stream error for task %s: %v", taskID, err)
+			}
+			break
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue // Empty line between events
+		}
+
+		// Parse SSE data line
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			log.Printf("Received SSE event for task %s: %s", taskID, data)
+
+			// Try to parse as TaskUpdate
+			var update TaskUpdate
+			if err := json.Unmarshal([]byte(data), &update); err == nil {
+				// Update task status if provided
+				if r.UpdateTaskStatus != nil && update.Status != "" {
+					if err := r.UpdateTaskStatus(taskID, string(update.Status)); err != nil {
+						log.Printf("Failed to update task status: %v", err)
+					}
+				}
+
+				// Append message if provided
+				if r.AppendMessage != nil && update.Message != nil && update.Message.Content != "" {
+					if err := r.AppendMessage(taskID, *update.Message); err != nil {
+						log.Printf("Failed to append message: %v", err)
+					}
+				}
+
+				// Broadcast to portal's SSE clients
+				r.broadcastUpdate(taskID, &update)
+
+				// Stop if task is completed or failed
+				if update.Status == TaskStatusCompleted || update.Status == TaskStatusFailed {
+					log.Printf("Task %s finished with status: %s", taskID, update.Status)
+					return
+				}
+			} else {
+				log.Printf("Failed to parse SSE event: %v", err)
+			}
+		}
+	}
 }
 
 // addConnection adds an SSE connection
