@@ -208,16 +208,7 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 	// Add model configuration if present
 	if config.ModelConfig != nil {
 		envVars = append(envVars, fmt.Sprintf("MODEL_PROVIDER=%s", config.ModelConfig.Provider))
-		envVars = append(envVars, fmt.Sprintf("MODEL_NAME=%s", config.ModelConfig.Name))
-		if config.ModelConfig.Endpoint != "" {
-			envVars = append(envVars, fmt.Sprintf("MODEL_ENDPOINT=%s", config.ModelConfig.Endpoint))
-		}
-		if config.ModelConfig.Temperature != nil {
-			envVars = append(envVars, fmt.Sprintf("MODEL_TEMPERATURE=%.2f", *config.ModelConfig.Temperature))
-		}
-		if config.ModelConfig.MaxTokens != nil {
-			envVars = append(envVars, fmt.Sprintf("MODEL_MAX_TOKENS=%d", *config.ModelConfig.MaxTokens))
-		}
+		envVars = append(envVars, fmt.Sprintf("MODEL=%s", config.ModelConfig.Name))
 	}
 
 	// Add auth configuration if present
@@ -263,7 +254,10 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 
 var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "/zeroclaw-data/workspace"
 config_path = "/zeroclaw-data/.zeroclaw/config.toml"
-default_temperature = 0.7
+{{ if .DefaultProvider }}default_provider = "{{ .DefaultProvider }}"
+{{ end }}{{ if .DefaultModel }}default_model = "{{ .DefaultModel }}"
+{{ end }}{{ if .ApiURL }}api_url = "{{ .ApiURL }}"
+{{ end }}default_temperature = {{ .DefaultTemperature }}
 
 [gateway]
 port = {{ .GatewayPort }}
@@ -314,12 +308,32 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		BearerToken: config.PortalToken,
 	})
 
+	// Extract model config for template
+	var defaultProvider, defaultModel, apiURL string
+	defaultTemperature := 0.7
+	if config.ModelConfig != nil {
+		defaultProvider = config.ModelConfig.Provider
+		defaultModel = config.ModelConfig.Name
+		apiURL = config.ModelConfig.Endpoint
+		if config.ModelConfig.Temperature != nil {
+			defaultTemperature = *config.ModelConfig.Temperature
+		}
+	}
+
 	data := struct {
-		GatewayPort string
-		Peers       []A2APeer
+		GatewayPort        string
+		Peers              []A2APeer
+		DefaultProvider    string
+		DefaultModel       string
+		ApiURL             string
+		DefaultTemperature float64
 	}{
-		GatewayPort: gatewayPort,
-		Peers:       peers,
+		GatewayPort:        gatewayPort,
+		Peers:              peers,
+		DefaultProvider:    defaultProvider,
+		DefaultModel:       defaultModel,
+		ApiURL:             apiURL,
+		DefaultTemperature: defaultTemperature,
 	}
 
 	tmpDir := os.Getenv("AGENT_CONFIG_DIR")

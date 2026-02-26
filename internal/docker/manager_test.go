@@ -40,9 +40,9 @@ func TestBuildEnvironmentVars_CompleteConfig(t *testing.T) {
 	envVars := buildEnvironmentVars(config)
 
 	// Check that we have the expected number of env vars
-	// Base: 3, Model: 5, Auth: 3, Provider-specific API key: 1 = 12 total
-	if len(envVars) != 12 {
-		t.Errorf("Expected 12 environment variables, got %d: %v", len(envVars), envVars)
+	// Base: 3, Model: 2, Auth: 3, Provider-specific API key: 1 = 9 total
+	if len(envVars) != 9 {
+		t.Errorf("Expected 9 environment variables, got %d: %v", len(envVars), envVars)
 	}
 
 	// Build a map for easier checking
@@ -69,17 +69,8 @@ func TestBuildEnvironmentVars_CompleteConfig(t *testing.T) {
 	if envMap["MODEL_PROVIDER"] != "openai" {
 		t.Errorf("Expected MODEL_PROVIDER=openai, got %s", envMap["MODEL_PROVIDER"])
 	}
-	if envMap["MODEL_NAME"] != "gpt-4-turbo" {
-		t.Errorf("Expected MODEL_NAME=gpt-4-turbo, got %s", envMap["MODEL_NAME"])
-	}
-	if envMap["MODEL_ENDPOINT"] != "https://api.openai.com/v1" {
-		t.Errorf("Expected MODEL_ENDPOINT=https://api.openai.com/v1, got %s", envMap["MODEL_ENDPOINT"])
-	}
-	if envMap["MODEL_TEMPERATURE"] != "0.70" {
-		t.Errorf("Expected MODEL_TEMPERATURE=0.70, got %s", envMap["MODEL_TEMPERATURE"])
-	}
-	if envMap["MODEL_MAX_TOKENS"] != "4096" {
-		t.Errorf("Expected MODEL_MAX_TOKENS=4096, got %s", envMap["MODEL_MAX_TOKENS"])
+	if envMap["MODEL"] != "gpt-4-turbo" {
+		t.Errorf("Expected MODEL=gpt-4-turbo, got %s", envMap["MODEL"])
 	}
 
 	// Check auth variables
@@ -172,16 +163,8 @@ func TestBuildEnvironmentVars_OnlyModel(t *testing.T) {
 	if envMap["MODEL_PROVIDER"] != "anthropic" {
 		t.Errorf("Expected MODEL_PROVIDER=anthropic, got %s", envMap["MODEL_PROVIDER"])
 	}
-	if envMap["MODEL_NAME"] != "claude-3-opus" {
-		t.Errorf("Expected MODEL_NAME=claude-3-opus, got %s", envMap["MODEL_NAME"])
-	}
-	if envMap["MODEL_ENDPOINT"] != "https://api.anthropic.com/v1" {
-		t.Errorf("Expected MODEL_ENDPOINT=https://api.anthropic.com/v1, got %s", envMap["MODEL_ENDPOINT"])
-	}
-
-	// Check that optional model vars are NOT present
-	if _, ok := envMap["MODEL_TEMPERATURE"]; ok {
-		t.Error("MODEL_TEMPERATURE should not be present when not set")
+	if envMap["MODEL"] != "claude-3-opus" {
+		t.Errorf("Expected MODEL=claude-3-opus, got %s", envMap["MODEL"])
 	}
 	if _, ok := envMap["MODEL_MAX_TOKENS"]; ok {
 		t.Error("MODEL_MAX_TOKENS should not be present when not set")
