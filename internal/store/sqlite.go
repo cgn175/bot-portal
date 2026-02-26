@@ -33,7 +33,7 @@ func RunMigrations(db *sql.DB) error {
 			status TEXT DEFAULT 'stopped',
 			container_id TEXT,
 			endpoint TEXT,
-			listen_port INTEGER DEFAULT 9000,
+			listen_port INTEGER DEFAULT 17000,
 			bearer_token TEXT,
 			agent_card TEXT,
 			config TEXT,
@@ -93,7 +93,7 @@ func RunMigrations(db *sql.DB) error {
 		table, column, definition string
 	}{
 		{"agents", "agent_type", "TEXT DEFAULT 'docker'"},
-		{"agents", "listen_port", "INTEGER DEFAULT 9000"},
+		{"agents", "listen_port", "INTEGER DEFAULT 17000"},
 		{"agents", "model_id", "TEXT"},
 		{"agents", "auth_config_id", "TEXT"},
 	}

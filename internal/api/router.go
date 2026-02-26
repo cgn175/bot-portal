@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -292,6 +293,8 @@ func (r *Router) handleAgentDetail(w http.ResponseWriter, req *http.Request) {
 		r.restartAgent(w, req, agentID)
 	case "ping":
 		r.pingAgent(w, req, agentID)
+	case "chat":
+		r.handleAgentChat(w, req, agentID)
 	case "logs":
 		r.streamAgentLogs(w, req, agentID)
 	default:
@@ -367,12 +370,26 @@ func (r *Router) createAgent(w http.ResponseWriter, req *http.Request) {
 
 	// Extract listen port from the endpoint URL for Docker agents
 	listenPort := 0
-	if agent.AgentType == "docker" && agent.Endpoint != "" {
-		if u, err := url.Parse(agent.Endpoint); err == nil {
-			if p := u.Port(); p != "" {
-				listenPort, _ = strconv.Atoi(p)
+	if agent.AgentType == "docker" {
+		// Use specific port if provided in image or default to random high port
+		// For now, we'll try to find a free port or use a common range starting from 17000
+		// Actually, let's let the user provide it via Endpoint if they want, but if it's empty, we'll assign one.
+		if agent.Endpoint != "" {
+			if u, err := url.Parse(agent.Endpoint); err == nil {
+				if p := u.Port(); p != "" {
+					listenPort, _ = strconv.Atoi(p)
+				}
 			}
 		}
+		if listenPort == 0 {
+			count := 0
+			agents, err := r.agentStore.List()
+			if err == nil {
+				count = len(agents)
+			}
+			listenPort = 17000 + count
+		}
+		agent.Endpoint = fmt.Sprintf("http://127.0.0.1:%d", listenPort)
 	}
 
 	newAgent := &store.Agent{
@@ -450,6 +467,18 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 				agent.ListenPort, _ = strconv.Atoi(p)
 			}
 		}
+	} else if at, ok := updates["agentType"].(string); ok && at == "docker" && at != agent.AgentType {
+		// Switching to docker, ensure endpoint is 127.0.0.1
+		if agent.ListenPort == 0 {
+			count := 0
+			agents, err := r.agentStore.List()
+			if err == nil {
+				count = len(agents)
+			}
+			agent.ListenPort = 17000 + count
+		}
+		agent.Endpoint = fmt.Sprintf("http://127.0.0.1:%d", agent.ListenPort)
+		needsNewContainer = true
 	}
 
 	// Remove stale container so startAgent creates a fresh one
@@ -720,14 +749,6 @@ func (r *Router) pingAgent(w http.ResponseWriter, req *http.Request, agentID str
 	}
 
 	endpoint := agent.Endpoint
-	if agent.AgentType == "docker" {
-		port := agent.ListenPort
-		if port == 0 {
-			port = 8080 // Default
-		}
-		endpoint = fmt.Sprintf("http://%s:%d", agent.ID, port)
-	}
-
 	if endpoint == "" {
 		http.Error(w, "Agent has no endpoint", http.StatusBadRequest)
 		return
@@ -758,6 +779,75 @@ func (r *Router) pingAgent(w http.ResponseWriter, req *http.Request, agentID str
 		"online": online,
 		"status": resp.StatusCode,
 	})
+}
+
+func (r *Router) handleAgentChat(w http.ResponseWriter, req *http.Request, agentID string) {
+	if req.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil || agent == nil {
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	var chatReq ChatRequest
+	if err := json.NewDecoder(req.Body).Decode(&chatReq); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(chatReq.Messages) == 0 {
+		http.Error(w, "Messages cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	// Create A2A task
+	lastMsg := chatReq.Messages[len(chatReq.Messages)-1]
+	taskID, err := r.createTask(a2a.ChannelID("portal", agentID), "portal", agentID, a2a.TaskMessage{
+		Role:      lastMsg.Role,
+		Content:   lastMsg.Content,
+		Timestamp: time.Now(),
+	})
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create task: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Forward task to agent (portal -> agent)
+	go func() {
+		url := fmt.Sprintf("%s/tasks", agent.Endpoint)
+		createReq := a2a.CreateTaskRequest{
+			Message: a2a.TaskMessage{
+				Role:      lastMsg.Role,
+				Content:   lastMsg.Content,
+				Timestamp: time.Now(),
+			},
+		}
+		body, _ := json.Marshal(createReq)
+
+		httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+		httpReq.Header.Set("Authorization", "Bearer "+agent.BearerToken)
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("X-Agent-ID", "portal")
+		httpReq.Header.Set("X-Channel-ID", a2a.ChannelID("portal", agent.ID))
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			log.Printf("Failed to forward chat task to agent %s: %v", agent.ID, err)
+			r.updateTaskStatus(taskID, string(a2a.TaskStatusFailed))
+			return
+		}
+		defer resp.Body.Close()
+		log.Printf("Chat task %s forwarded to agent %s, status: %d", taskID, agent.ID, resp.StatusCode)
+	}()
+
+	// For now, let's just return the task ID.
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"taskId": taskID})
 }
 
 func (r *Router) streamAgentLogs(w http.ResponseWriter, req *http.Request, agentID string) {
@@ -997,19 +1087,10 @@ func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {
 
 	var result []a2a.AgentInfo
 	for _, a := range agents {
-		endpoint := a.Endpoint
-		if a.AgentType == "docker" {
-			port := a.ListenPort
-			if port == 0 {
-				port = 8080 // Default
-			}
-			endpoint = fmt.Sprintf("http://%s:%d", a.ID, port)
-		}
-
 		result = append(result, a2a.AgentInfo{
 			ID:          a.ID,
 			Name:        a.Name,
-			Endpoint:    endpoint,
+			Endpoint:    a.Endpoint,
 			BearerToken: a.BearerToken,
 		})
 	}

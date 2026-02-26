@@ -405,6 +405,19 @@ class ApiClient {
     }
     return res.json()
   }
+
+  async sendAgentChatMessage(agentId: string, messages: Message[]): Promise<{ taskId: string }> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}?action=chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages })
+    })
+    if (!res.ok) {
+      const error = await res.text()
+      throw new Error(error || 'Failed to send agent chat message')
+    }
+    return res.json()
+  }
 }
 
 export interface ChatCompletionResponse {

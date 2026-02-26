@@ -383,6 +383,17 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 	envVars := buildEnvironmentVars(config)
 	envVars = append(envVars, fmt.Sprintf("ZEROCLAW_GATEWAY_PORT=%s", gatewayPort))
 
+	// Port bindings for host access
+	portBindings := nat.PortMap{}
+	if config.ListenPort > 0 {
+		portBindings[containerPort] = []nat.PortBinding{
+			{
+				HostIP:   "127.0.0.1",
+				HostPort: fmt.Sprintf("%d", config.ListenPort),
+			},
+		}
+	}
+
 	// Container config - use image ID to avoid registry lookup
 	containerConfig := &container.Config{
 		Image:        imageID,
@@ -417,6 +428,7 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 	// but Binds is usually fine if the host path exists.
 	hostConfig := &container.HostConfig{
 		NetworkMode:     container.NetworkMode(selectedNetwork),
+		PortBindings:    portBindings,
 		AutoRemove:      false,
 		PublishAllPorts: false,
 		Mounts: []mount.Mount{

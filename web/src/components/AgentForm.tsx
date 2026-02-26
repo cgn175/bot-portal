@@ -240,22 +240,23 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
           </small>
         </div>
 
-        {formData.agentType === 'native' && (
-          <div className="form-group">
-            <label htmlFor="endpoint">Endpoint *</label>
-            <input
-              id="endpoint"
-              type="text"
-              required
-              value={formData.endpoint}
-              onChange={e => setFormData(prev => ({ ...prev, endpoint: e.target.value }))}
-              placeholder="http://localhost:8081"
-            />
-            <small>
-              The URL where the native agent is listening
-            </small>
-          </div>
-        )}
+        <div className="form-group">
+          <label htmlFor="endpoint">Endpoint *</label>
+          <input
+            id="endpoint"
+            type="text"
+            required
+            value={formData.endpoint}
+            onChange={e => setFormData(prev => ({ ...prev, endpoint: e.target.value }))}
+            placeholder={formData.agentType === 'docker' ? `http://127.0.0.1:17000` : "http://localhost:8081"}
+            disabled={formData.agentType === 'docker'}
+          />
+          <small>
+            {formData.agentType === 'docker'
+              ? 'Automatically set for Docker agents based on ID and port'
+              : 'The URL where the native agent is listening'}
+          </small>
+        </div>
 
         <div className="form-group">
           <label htmlFor="authConfigId">Auth Provider *</label>

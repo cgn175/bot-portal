@@ -191,12 +191,10 @@ export default function AgentDetail() {
         <div style={{ display: 'grid', gap: '1.25rem' }}>
           <InfoRow label="Agent ID" value={<code>{agent.id}</code>} />
           <InfoRow label="Agent Type" value={<StatusBadge status={agent.agentType} />} />
-          {!isDocker && (
-            <InfoRow
-              label="Endpoint"
-              value={<code>{agent.endpoint || 'N/A'}</code>}
-            />
-          )}
+          <InfoRow
+            label="Endpoint"
+            value={<code>{agent.endpoint || (isDocker ? `http://${agent.id}:8080` : 'N/A')}</code>}
+          />
           <InfoRow label="Docker Image" value={<code>{agent.image || 'N/A'}</code>} />
           
           <InfoRow 
