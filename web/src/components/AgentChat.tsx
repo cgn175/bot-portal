@@ -128,15 +128,13 @@ export default function AgentChat({ agentId, agentToken }: AgentChatProps) {
   }, [loadHistory])
 
   // Connect to SSE stream for task updates
-  const connectTaskStream = useCallback((taskId: string, token: string) => {
+  const connectTaskStream = useCallback((taskId: string) => {
     // Close any existing connection
     if (esRef.current) {
       esRef.current.close()
     }
 
-    const es = new EventSource(`/tasks/${taskId}/stream`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    } as EventSourceInit)
+    const es = new EventSource(`/api/tasks/${taskId}/stream`)
     esRef.current = es
 
     es.onmessage = (event) => {
@@ -192,9 +190,9 @@ export default function AgentChat({ agentId, agentToken }: AgentChatProps) {
 
   // Set up SSE or polling when there's an active task
   useEffect(() => {
-    if (activeTaskId && agentToken) {
+    if (activeTaskId) {
       // Try SSE first
-      const es = connectTaskStream(activeTaskId, agentToken)
+      const es = connectTaskStream(activeTaskId)
 
       // Set up polling as fallback (in case SSE fails)
       pollIntervalRef.current = setInterval(() => {
@@ -220,7 +218,7 @@ export default function AgentChat({ agentId, agentToken }: AgentChatProps) {
         }
       }
     }
-  }, [activeTaskId, agentToken, connectTaskStream, pollForTaskUpdate, handleTaskComplete])
+  }, [activeTaskId, connectTaskStream, pollForTaskUpdate, handleTaskComplete])
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()

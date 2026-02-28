@@ -16,6 +16,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
@@ -34,6 +35,10 @@ type Router struct {
 	authConfigStore    *store.AuthConfigStore
 	a2aRouter          *a2a.Router
 	skipModelDiscovery bool // For testing: skip async model discovery
+
+	// SSE connections for frontend task streaming
+	taskStreamMu    sync.RWMutex
+	taskStreamConns map[string]map[string]chan *a2a.TaskUpdate // taskID -> addr -> channel
 }
 
 // NewRouter creates a new API router
@@ -52,6 +57,7 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 		messageStore:    messageStore,
 		modelStore:      modelStore,
 		authConfigStore: authConfigStore,
+		taskStreamConns: make(map[string]map[string]chan *a2a.TaskUpdate),
 	}
 
 	// Initialize A2A router
@@ -96,6 +102,9 @@ func (r *Router) Run(addr string) error {
 
 	// Messages
 	mux.HandleFunc("/api/messages/stream", r.handleMessageStream)
+
+	// Task stream (frontend SSE for chat task updates)
+	mux.HandleFunc("/api/tasks/", r.handleTaskStream)
 
 	// Model management
 	mux.HandleFunc("/api/models", r.handleModels)
@@ -1087,6 +1096,98 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 }
 
 // ============================================================================
+// Frontend Task Stream (SSE for chat task updates)
+// ============================================================================
+
+func (r *Router) handleTaskStream(w http.ResponseWriter, req *http.Request) {
+	// Parse /api/tasks/{taskID}/stream
+	path := strings.TrimPrefix(req.URL.Path, "/api/tasks/")
+	if !strings.HasSuffix(path, "/stream") {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	taskID := strings.TrimSuffix(path, "/stream")
+	if taskID == "" {
+		http.Error(w, "Task ID required", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		if rr, ok := w.(*responseRecorder); ok {
+			if f, ok := rr.ResponseWriter.(http.Flusher); ok {
+				flusher = f
+			}
+		}
+	}
+	if flusher == nil {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := make(chan *a2a.TaskUpdate, 10)
+	addr := req.RemoteAddr
+	r.addTaskStreamConn(taskID, addr, ch)
+	defer r.removeTaskStreamConn(taskID, addr)
+
+	notify := req.Context().Done()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-notify:
+			return
+		case update := <-ch:
+			data, _ := json.Marshal(update)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		case <-ticker.C:
+			fmt.Fprintf(w, ": keepalive\n\n")
+			flusher.Flush()
+		}
+	}
+}
+
+func (r *Router) addTaskStreamConn(taskID, addr string, ch chan *a2a.TaskUpdate) {
+	r.taskStreamMu.Lock()
+	defer r.taskStreamMu.Unlock()
+	if r.taskStreamConns[taskID] == nil {
+		r.taskStreamConns[taskID] = make(map[string]chan *a2a.TaskUpdate)
+	}
+	r.taskStreamConns[taskID][addr] = ch
+}
+
+func (r *Router) removeTaskStreamConn(taskID, addr string) {
+	r.taskStreamMu.Lock()
+	defer r.taskStreamMu.Unlock()
+	if conns, ok := r.taskStreamConns[taskID]; ok {
+		delete(conns, addr)
+		if len(conns) == 0 {
+			delete(r.taskStreamConns, taskID)
+		}
+	}
+}
+
+func (r *Router) broadcastTaskUpdate(taskID string, update *a2a.TaskUpdate) {
+	r.taskStreamMu.RLock()
+	defer r.taskStreamMu.RUnlock()
+	if conns, ok := r.taskStreamConns[taskID]; ok {
+		for _, ch := range conns {
+			select {
+			case ch <- update:
+			default:
+			}
+		}
+	}
+}
+
+// ============================================================================
 // Helper methods for A2A Router
 // ============================================================================
 
@@ -1211,6 +1312,8 @@ func (r *Router) subscribeToAgentSSE(agent *store.Agent, taskID string) {
 				if update.Message != nil && update.Message.Content != "" {
 					r.appendMessage(taskID, *update.Message)
 				}
+				// Broadcast to frontend SSE clients
+				r.broadcastTaskUpdate(taskID, &update)
 				if update.Status == a2a.TaskStatusCompleted || update.Status == a2a.TaskStatusFailed {
 					log.Printf("Task %s finished with status: %s", taskID, update.Status)
 					return

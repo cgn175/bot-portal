@@ -435,7 +435,7 @@ func (r *Router) removeConnection(taskID, addr string) {
 	}
 }
 
-// broadcastUpdate broadcasts an update to all connections for a task
+// broadcastUpdate broadcasts an update to all SSE connections for a task
 func (r *Router) broadcastUpdate(taskID string, update *TaskUpdate) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
