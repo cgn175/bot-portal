@@ -779,12 +779,13 @@ func (r *Router) recreateAgent(w http.ResponseWriter, req *http.Request, agentID
 			r.agentStore.UpdateStatus(aid, "stopped")
 			return
 		}
+		agent.ContainerID = ""
 		r.startAgent(w, req, agentID)
 		r.agentStore.UpdateStatus(aid, "running")
 	}(containerID, agentID)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "recreating"})
 }
 
 func (r *Router) pingAgent(w http.ResponseWriter, req *http.Request, agentID string) {
