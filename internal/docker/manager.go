@@ -526,6 +526,12 @@ func (m *Manager) GetContainerStatus(ctx context.Context, containerID string) (s
 	return inspect.State.Status, nil
 }
 
+// ContainerExists checks if a container exists in Docker
+func (m *Manager) ContainerExists(ctx context.Context, containerID string) bool {
+	_, err := m.cli.ContainerInspect(ctx, containerID)
+	return err == nil
+}
+
 // ContainerInfo represents container information
 type ContainerInfo struct {
 	ID     string

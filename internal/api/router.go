@@ -543,22 +543,21 @@ func (r *Router) deleteAgent(w http.ResponseWriter, req *http.Request, agentID s
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+// doStartAgent contains the core logic for starting an agent container.
+// It can be called from both HTTP handlers and background goroutines.
+func (r *Router) doStartAgent(agentID string) error {
 	agent, err := r.agentStore.GetByID(agentID)
 	if err != nil || agent == nil {
-		http.Error(w, "Agent not found", http.StatusNotFound)
-		return
+		return fmt.Errorf("agent not found")
 	}
 
 	// Native agents are always running
 	if agent.AgentType == "native" {
 		r.agentStore.UpdateStatus(agentID, "running")
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "running", "message": "Native agent marked as running"})
-		return
+		return nil
 	}
 
-	ctx := req.Context()
+	ctx := context.Background()
 
 	// Resolve listen port for native agents if not already set
 	listenPort := agent.ListenPort
@@ -598,8 +597,7 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 		if agent.ModelID != "" {
 			model, err := r.modelStore.GetByID(agent.ModelID)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to fetch model config: %v", err), http.StatusInternalServerError)
-				return
+				return fmt.Errorf("failed to fetch model config: %w", err)
 			}
 			if model != nil {
 				modelConfig := &docker.ModelConfig{
@@ -611,8 +609,7 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 				if model.DefaultParams != "" {
 					var params map[string]interface{}
 					if err := json.Unmarshal([]byte(model.DefaultParams), &params); err != nil {
-						http.Error(w, fmt.Sprintf("Failed to parse model default params: %v", err), http.StatusInternalServerError)
-						return
+						return fmt.Errorf("failed to parse model default params: %w", err)
 					}
 					if temp, ok := params["temperature"].(float64); ok {
 						modelConfig.Temperature = &temp
@@ -631,8 +628,7 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 		if agent.AuthConfigID != "" {
 			auth, err := r.authConfigStore.GetByID(agent.AuthConfigID)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to fetch auth config: %v", err), http.StatusInternalServerError)
-				return
+				return fmt.Errorf("failed to fetch auth config: %w", err)
 			}
 			if auth != nil {
 				authConfig := &docker.AuthConfig{
@@ -643,8 +639,7 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 				if auth.Credentials != "" {
 					var creds map[string]string
 					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err != nil {
-						http.Error(w, fmt.Sprintf("Failed to parse auth credentials: %v", err), http.StatusInternalServerError)
-						return
+						return fmt.Errorf("failed to parse auth credentials: %w", err)
 					}
 					if apiKey, ok := creds["api_key"]; ok {
 						authConfig.ApiKey = apiKey
@@ -662,8 +657,7 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 
 		containerID, err := r.dockerMgr.CreateContainer(ctx, containerConfig)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to create container: %v", err), http.StatusInternalServerError)
-			return
+			return fmt.Errorf("failed to create container: %w", err)
 		}
 
 		// Update agent with container ID
@@ -671,13 +665,30 @@ func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID st
 		r.agentStore.Update(agent)
 	}
 
+	// Verify container exists in Docker (it may have been removed externally)
+	if agent.ContainerID != "" && !r.dockerMgr.ContainerExists(ctx, agent.ContainerID) {
+		log.Printf("Container %s for agent %s no longer exists, will recreate", agent.ContainerID, agentID)
+		agent.ContainerID = ""
+	}
+
 	// Start container
 	if err := r.dockerMgr.StartContainer(ctx, agent.ContainerID); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to start container: %v", err), http.StatusInternalServerError)
-		return
+		return fmt.Errorf("failed to start container: %w", err)
 	}
 
 	r.agentStore.UpdateStatus(agentID, "running")
+	return nil
+}
+
+func (r *Router) startAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+	if err := r.doStartAgent(agentID); err != nil {
+		if err.Error() == "agent not found" {
+			http.Error(w, "Agent not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "started"})
@@ -778,7 +789,7 @@ func (r *Router) recreateAgent(w http.ResponseWriter, req *http.Request, agentID
 
 	r.agentStore.UpdateStatus(agentID, "recreating")
 
-	// Perform restart asynchronously
+	// Perform recreate asynchronously
 	// Capture values to avoid race condition with the agent pointer
 	containerID := agent.ContainerID
 	go func(cid, aid string) {
@@ -788,9 +799,27 @@ func (r *Router) recreateAgent(w http.ResponseWriter, req *http.Request, agentID
 			r.agentStore.UpdateStatus(aid, "stopped")
 			return
 		}
+
+		// Clear container ID from agent record so doStartAgent creates a new one
+		agent, err := r.agentStore.GetByID(aid)
+		if err != nil || agent == nil {
+			log.Printf("Failed to get agent %s after removing container: %v", aid, err)
+			r.agentStore.UpdateStatus(aid, "stopped")
+			return
+		}
 		agent.ContainerID = ""
-		r.startAgent(w, req, agentID)
-		r.agentStore.UpdateStatus(aid, "running")
+		if err := r.agentStore.Update(agent); err != nil {
+			log.Printf("Failed to update agent %s after clearing container ID: %v", aid, err)
+			r.agentStore.UpdateStatus(aid, "stopped")
+			return
+		}
+
+		// Start a new container
+		if err := r.doStartAgent(aid); err != nil {
+			log.Printf("Failed to start agent %s after recreating: %v", aid, err)
+			r.agentStore.UpdateStatus(aid, "stopped")
+			return
+		}
 	}(containerID, agentID)
 
 	w.Header().Set("Content-Type", "application/json")
