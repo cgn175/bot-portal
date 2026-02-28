@@ -359,8 +359,8 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 	}
 	f.Close()
 
-	// Fix world-readable warning from zeroclaw
-	if err := os.Chmod(configPath, 0600); err != nil {
+	// Make config file readable by all users (agent runs as nobody:nobody)
+	if err := os.Chmod(configPath, 0644); err != nil {
 		fmt.Printf("Warning: failed to chmod config file: %v\n", err)
 	}
 
@@ -464,6 +464,11 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 				Source:   absConfigPath,
 				Target:   "/zeroclaw-data/.zeroclaw/config.toml",
 				ReadOnly: true,
+			},
+			{
+				Type:   mount.TypeVolume,
+				Source: fmt.Sprintf("bot-portal-agent-%s-workspace", config.AgentID),
+				Target: "/zeroclaw-data/workspace",
 			},
 		},
 	}
