@@ -298,6 +298,8 @@ func (r *Router) handleAgentDetail(w http.ResponseWriter, req *http.Request) {
 		r.stopAgent(w, req, agentID)
 	case "restart":
 		r.restartAgent(w, req, agentID)
+	case "recreate":
+		r.recreateAgent(w, req, agentID)
 	case "ping":
 		r.pingAgent(w, req, agentID)
 	case "chat":
@@ -741,6 +743,43 @@ func (r *Router) restartAgent(w http.ResponseWriter, req *http.Request, agentID 
 			r.agentStore.UpdateStatus(aid, "stopped")
 			return
 		}
+		r.agentStore.UpdateStatus(aid, "running")
+	}(containerID, agentID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
+}
+
+func (r *Router) recreateAgent(w http.ResponseWriter, req *http.Request, agentID string) {
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil || agent == nil {
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	if agent.AgentType == "native" {
+		http.Error(w, "Cannot recreate native agents", http.StatusBadRequest)
+		return
+	}
+
+	if agent.ContainerID == "" {
+		http.Error(w, "No container to recreate", http.StatusBadRequest)
+		return
+	}
+
+	r.agentStore.UpdateStatus(agentID, "recreating")
+
+	// Perform restart asynchronously
+	// Capture values to avoid race condition with the agent pointer
+	containerID := agent.ContainerID
+	go func(cid, aid string) {
+		ctx := context.Background()
+		if err := r.dockerMgr.RemoveContainer(ctx, cid); err != nil {
+			log.Printf("Failed to remove container %s: %v", cid, err)
+			r.agentStore.UpdateStatus(aid, "stopped")
+			return
+		}
+		r.startAgent(w, req, agentID)
 		r.agentStore.UpdateStatus(aid, "running")
 	}(containerID, agentID)
 

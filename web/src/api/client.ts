@@ -192,6 +192,11 @@ class ApiClient {
     if (!res.ok) throw new Error('Failed to restart agent')
   }
 
+  async recreateAgent(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/agents/${id}?action=recreate`, { method: 'POST' })
+    if (!res.ok) throw new Error('Failed to recreate agent')
+  }
+
   async pingAgent(id: string): Promise<{ online: boolean; error?: string; status?: number }> {
     const res = await fetch(`${API_BASE}/agents/${id}?action=ping`)
     if (!res.ok) throw new Error('Failed to test agent connection')

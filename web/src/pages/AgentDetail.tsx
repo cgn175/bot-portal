@@ -37,14 +37,25 @@ export default function AgentDetail() {
     loadMetadata()
   }, [])
 
-  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart') => {
+  const handleAction = useCallback(async (action: 'start' | 'stop' | 'restart' | 'recreate') => {
     if (!id) return
     try {
       setError('')
       setSuccess('')
-      if (action === 'start') await api.startAgent(id)
-      else if (action === 'stop') await api.stopAgent(id)
-      else await api.restartAgent(id)
+      switch (action) {
+        case 'start':
+          await api.startAgent(id)
+          break
+        case 'stop':
+          await api.stopAgent(id)
+          break
+        case 'restart':
+          await api.restartAgent(id)
+          break
+        case 'recreate':
+          await api.recreateAgent(id)
+          break
+      }
       setSuccess(`Agent ${action}ed successfully`)
       setTimeout(refreshAgents, 1000)
       setTimeout(() => setSuccess(''), 5000)
@@ -175,6 +186,14 @@ export default function AgentDetail() {
                   Stop
                 </button>
               </>
+            )}
+
+            {isDocker && agent.status === 'running' && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => handleAction('recreate')}>
+                    Recreate Container
+                  </button>
+                </>
             )}
 
             <button className="btn btn-danger" onClick={handleDelete}>
