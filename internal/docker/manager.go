@@ -364,6 +364,10 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		fmt.Printf("Warning: failed to chmod config file: %v\n", err)
 	}
 
+	if err := os.Chown(configPath, 65534, 65534); err != nil {
+		fmt.Printf("Warning: failed to chown config file: %v\n", err)
+	}
+
 	return configPath, nil
 }
 
@@ -463,7 +467,7 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 				Type:     mount.TypeBind,
 				Source:   absConfigPath,
 				Target:   "/zeroclaw-data/.zeroclaw/config.toml",
-				ReadOnly: true,
+				ReadOnly: false,
 			},
 			{
 				Type:   mount.TypeVolume,
