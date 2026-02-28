@@ -512,9 +512,11 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 	}
 	if mID, ok := updates["modelId"].(string); ok {
 		agent.ModelID = mID
+		needsNewContainer = true
 	}
 	if aID, ok := updates["authConfigId"].(string); ok {
 		agent.AuthConfigID = aID
+		needsNewContainer = true
 	}
 
 	if err := r.agentStore.Update(agent); err != nil {
