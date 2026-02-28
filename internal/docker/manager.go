@@ -207,7 +207,11 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 
 	// Add model configuration if present
 	if config.ModelConfig != nil {
-		envVars = append(envVars, fmt.Sprintf("MODEL_PROVIDER=%s", config.ModelConfig.Provider))
+		var modelProvider = config.ModelConfig.Provider
+		if modelProvider == "custom" {
+			modelProvider = "custom:" + config.ModelConfig.Endpoint
+		}
+		envVars = append(envVars, fmt.Sprintf("MODEL_PROVIDER=%s", modelProvider))
 		envVars = append(envVars, fmt.Sprintf("MODEL=%s", config.ModelConfig.Name))
 	}
 
