@@ -851,58 +851,71 @@ func (r *Router) handleAgentChat(w http.ResponseWriter, req *http.Request, agent
 		return
 	}
 
-	// Create A2A task
 	lastMsg := chatReq.Messages[len(chatReq.Messages)-1]
-	taskID, err := r.createTask(a2a.ChannelID("portal", agentID), "portal", agentID, a2a.TaskMessage{
+
+	// Forward task to agent first to get the agent's task ID
+	url := fmt.Sprintf("%s/tasks", agent.Endpoint)
+	createReq := a2a.CreateTaskRequest{
+		Message: a2a.TaskMessage{
+			Role:      lastMsg.Role,
+			Content:   lastMsg.Content,
+			Timestamp: time.Now(),
+		},
+	}
+	body, _ := json.Marshal(createReq)
+
+	httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+	httpReq.Header.Set("Authorization", "Bearer "+agent.BearerToken)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Agent-ID", "portal")
+	httpReq.Header.Set("X-Channel-ID", a2a.ChannelID("portal", agent.ID))
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("Failed to forward chat task to agent %s: %v", agent.ID, err)
+		http.Error(w, fmt.Sprintf("Failed to reach agent: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("Agent %s returned error: %s", agent.ID, string(respBody))
+		http.Error(w, fmt.Sprintf("Agent returned error: %s", string(respBody)), resp.StatusCode)
+		return
+	}
+
+	// Parse the agent's response to get its task ID
+	var agentResp struct {
+		Task struct {
+			ID string `json:"id"`
+		} `json:"task"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&agentResp); err != nil || agentResp.Task.ID == "" {
+		log.Printf("Failed to parse task ID from agent %s response: %v", agent.ID, err)
+		http.Error(w, "Failed to parse agent response", http.StatusInternalServerError)
+		return
+	}
+
+	taskID := agentResp.Task.ID
+	log.Printf("Chat task %s created by agent %s", taskID, agent.ID)
+
+	// Save the task locally using the agent's task ID
+	_, err = r.createTaskWithID(taskID, a2a.ChannelID("portal", agentID), "portal", agentID, a2a.TaskMessage{
 		Role:      lastMsg.Role,
 		Content:   lastMsg.Content,
 		Timestamp: time.Now(),
 	})
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create task: %v", err), http.StatusInternalServerError)
+		log.Printf("Failed to save task %s locally: %v", taskID, err)
+		http.Error(w, fmt.Sprintf("Failed to save task: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Forward task to agent (portal -> agent) and subscribe to SSE stream
-	go func() {
-		url := fmt.Sprintf("%s/tasks", agent.Endpoint)
-		createReq := a2a.CreateTaskRequest{
-			Message: a2a.TaskMessage{
-				Role:      lastMsg.Role,
-				Content:   lastMsg.Content,
-				Timestamp: time.Now(),
-			},
-		}
-		body, _ := json.Marshal(createReq)
+	// Subscribe to agent's SSE stream in the background
+	go r.subscribeToAgentSSE(agent, taskID)
 
-		httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
-		httpReq.Header.Set("Authorization", "Bearer "+agent.BearerToken)
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("X-Agent-ID", "portal")
-		httpReq.Header.Set("X-Channel-ID", a2a.ChannelID("portal", agent.ID))
-
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			log.Printf("Failed to forward chat task to agent %s: %v", agent.ID, err)
-			r.updateTaskStatus(taskID, string(a2a.TaskStatusFailed))
-			return
-		}
-		defer resp.Body.Close()
-		log.Printf("Chat task %s forwarded to agent %s, status: %d", taskID, agent.ID, resp.StatusCode)
-
-		if resp.StatusCode >= 400 {
-			respBody, _ := io.ReadAll(resp.Body)
-			log.Printf("Agent %s returned error: %s", agent.ID, string(respBody))
-			r.updateTaskStatus(taskID, string(a2a.TaskStatusFailed))
-			return
-		}
-
-		// Subscribe to agent's SSE stream to receive responses
-		r.subscribeToAgentSSE(agent, taskID)
-	}()
-
-	// For now, let's just return the task ID.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"taskId": taskID})
 }
@@ -1078,8 +1091,13 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 // ============================================================================
 
 func (r *Router) createTask(channelID, senderID, recipientID string, message a2a.TaskMessage) (string, error) {
+	id := fmt.Sprintf("task-%d", time.Now().UnixNano())
+	return r.createTaskWithID(id, channelID, senderID, recipientID, message)
+}
+
+func (r *Router) createTaskWithID(id, channelID, senderID, recipientID string, message a2a.TaskMessage) (string, error) {
 	taskLog := &store.TaskLog{
-		ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		ID:          id,
 		ChannelID:   channelID,
 		SenderID:    senderID,
 		RecipientID: recipientID,
