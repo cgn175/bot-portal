@@ -559,6 +559,15 @@ func (r *Router) doStartAgent(agentID string) error {
 
 	ctx := context.Background()
 
+	// Verify container exists in Docker (it may have been removed externally)
+	if agent.ContainerID != "" && !r.dockerMgr.ContainerExists(ctx, agent.ContainerID) {
+		log.Printf("Container %s for agent %s no longer exists, will recreate", agent.ContainerID, agentID)
+		agent.ContainerID = ""
+		if err := r.agentStore.Update(agent); err != nil {
+			return fmt.Errorf("failed to update agent after clearing container ID: %w", err)
+		}
+	}
+
 	// Resolve listen port for native agents if not already set
 	listenPort := agent.ListenPort
 	if agent.AgentType == "native" && listenPort == 0 && agent.Endpoint != "" {
@@ -663,12 +672,6 @@ func (r *Router) doStartAgent(agentID string) error {
 		// Update agent with container ID
 		agent.ContainerID = containerID
 		r.agentStore.Update(agent)
-	}
-
-	// Verify container exists in Docker (it may have been removed externally)
-	if agent.ContainerID != "" && !r.dockerMgr.ContainerExists(ctx, agent.ContainerID) {
-		log.Printf("Container %s for agent %s no longer exists, will recreate", agent.ContainerID, agentID)
-		agent.ContainerID = ""
 	}
 
 	// Start container
