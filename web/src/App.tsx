@@ -1,5 +1,8 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { CopilotPopup } from '@copilotkit/react-ui'
 import { AgentProvider } from './contexts/AgentContext'
+import { CopilotProvider } from './copilot/CopilotProvider'
+import { CopilotActions } from './copilot/CopilotActions'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
 import AgentDetail from './pages/AgentDetail'
@@ -20,8 +23,10 @@ function App() {
   }
 
   return (
-    <AgentProvider>
-      <div className="app">
+    <CopilotProvider>
+      <CopilotActions />
+      <AgentProvider>
+        <div className="app">
         <a href="#content" className="skip-link">
           Skip to main content
         </a>
@@ -84,7 +89,14 @@ function App() {
           </ErrorBoundary>
         </main>
       </div>
+      <CopilotPopup
+        labels={{
+          title: "Bot Portal Assistant",
+          initial: "Hi! I can help you manage agents, models, and auth configs. What would you like to do?",
+        }}
+      />
     </AgentProvider>
+    </CopilotProvider>
   )
 }
 

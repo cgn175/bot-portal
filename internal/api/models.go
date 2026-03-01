@@ -62,7 +62,7 @@ func (r *Router) createModel(w http.ResponseWriter, req *http.Request) {
 		Name         string                 `json:"name"`
 		Provider     string                 `json:"provider"`
 		ModelName    string                 `json:"modelName"`
-		APIKeyConfig map[string]interface{}  `json:"apiKeyConfig"`
+		APIKeyConfig map[string]interface{} `json:"apiKeyConfig"`
 		BaseURL      string                 `json:"baseUrl"`
 	}
 
@@ -183,4 +183,45 @@ func (r *Router) deleteModel(w http.ResponseWriter, req *http.Request, modelID s
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleModelDefault handles PUT /api/models/default to set the default model
+func (r *Router) handleModelDefault(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodPut:
+		var body struct {
+			ModelID string `json:"modelId"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.ModelID == "" {
+			http.Error(w, "modelId is required", http.StatusBadRequest)
+			return
+		}
+		if err := r.modelStore.SetDefault(body.ModelID); err != nil {
+			if err == store.ErrNotFound {
+				http.Error(w, "Model not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		model, _ := r.modelStore.GetByID(body.ModelID)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(model)
+
+	case http.MethodGet:
+		model, err := r.modelStore.GetDefault()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if model == nil {
+			http.Error(w, "No models configured", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(model)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }

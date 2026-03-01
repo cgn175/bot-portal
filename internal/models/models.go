@@ -33,6 +33,7 @@ type Model struct {
 	ModelIdentifier string    `json:"modelIdentifier"`
 	EndpointURL     string    `json:"endpointUrl,omitempty"`
 	DefaultParams   string    `json:"defaultParams,omitempty"`
+	IsDefault       bool      `json:"isDefault,omitempty"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
