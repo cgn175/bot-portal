@@ -6,5 +6,6 @@ export const config = {
   backendUrl: process.env.BACKEND_URL || 'http://localhost:8080',
 
   // CORS allowed origin (React dev server)
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  // Support both default vite port (5173) and custom port (3100)
+  corsOrigin: process.env.CORS_ORIGIN || ['http://localhost:3100', 'http://localhost:5173'],
 };

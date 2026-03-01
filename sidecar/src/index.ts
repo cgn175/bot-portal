@@ -23,11 +23,8 @@ const serviceAdapter = new BackendRuntimeAdapter(backendAdapter);
 
 app.use('/copilot', (req, res) => {
   const runtime = new CopilotRuntime({
-    actions: [],
+    serviceAdapter: serviceAdapter,
   });
-
-  // Wire the service adapter using the handleServiceAdapter method
-  runtime.handleServiceAdapter(serviceAdapter);
 
   const handler = copilotRuntimeNodeHttpEndpoint({
     endpoint: '/copilot',

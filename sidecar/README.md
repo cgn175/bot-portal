@@ -15,7 +15,7 @@ npm run dev  # Development with hot reload
 |----------|---------|-------------|
 | `COPILOT_PORT` | `3001` | Port for sidecar server |
 | `BACKEND_URL` | `http://localhost:8080` | Bot Portal Go backend URL |
-| `CORS_ORIGIN` | `http://localhost:5173` | React dev server URL |
+| `CORS_ORIGIN` | `http://localhost:5173` || `http://localhost:3100` | React dev server URL |
 
 ## Architecture
 
