@@ -24,8 +24,8 @@ function App() {
 
   return (
     <CopilotProvider>
-      <CopilotActions />
       <AgentProvider>
+        <CopilotActions />
         <div className="app">
         <a href="#content" className="skip-link">
           Skip to main content
