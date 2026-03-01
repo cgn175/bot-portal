@@ -439,3 +439,50 @@ func TestHandleClaudeMessages(t *testing.T) {
 		t.Errorf("Expected 'Provider proxy not yet implemented', got %v", resp["error"])
 	}
 }
+
+func TestTransformClaudeStreamToOpenAI(t *testing.T) {
+	// Simulate Claude SSE stream
+	claudeStream := `event: message_start
+data: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}
+
+event: message_stop
+data: {"type":"message_stop"}
+`
+
+	// Create a test response recorder
+	rr := httptest.NewRecorder()
+
+	// Call the transformation function
+	err := transformClaudeStreamToOpenAI(bytes.NewReader([]byte(claudeStream)), rr)
+	if err != nil {
+		t.Fatalf("transformClaudeStreamToOpenAI failed: %v", err)
+	}
+
+	// Parse the output
+	output := rr.Body.String()
+
+	// Verify output contains OpenAI format chunks
+	if !bytes.Contains([]byte(output), []byte(`"object":"chat.completion.chunk"`)) {
+		t.Error("Output missing object:chat.completion.chunk")
+	}
+
+	// Verify delta content is present
+	if !bytes.Contains([]byte(output), []byte(`"delta":{"content":"Hello"}`)) {
+		t.Error("Output missing delta content for 'Hello'")
+	}
+
+	if !bytes.Contains([]byte(output), []byte(`"delta":{"content":" world"}`)) {
+		t.Error("Output missing delta content for ' world'")
+	}
+
+	// Verify [DONE] marker
+	if !bytes.Contains([]byte(output), []byte("data: [DONE]")) {
+		t.Error("Output missing [DONE] marker")
+	}
+}

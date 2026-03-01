@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -223,4 +225,85 @@ func (r *Router) handleClaudeMessages(w http.ResponseWriter, req *http.Request) 
 	json.NewEncoder(w).Encode(map[string]string{
 		"error": "Provider proxy not yet implemented",
 	})
+}
+
+// transformClaudeStreamToOpenAI transforms Claude SSE stream to OpenAI format
+func transformClaudeStreamToOpenAI(claudeStream io.Reader, w http.ResponseWriter) error {
+	scanner := bufio.NewScanner(claudeStream)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return fmt.Errorf("streaming not supported")
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Skip event lines
+		if strings.HasPrefix(line, "event:") {
+			continue
+		}
+
+		// Process data lines
+		if strings.HasPrefix(line, "data:") {
+			data := strings.TrimPrefix(line, "data: ")
+
+			var claudeEvent ClaudeStreamEvent
+			if err := json.Unmarshal([]byte(data), &claudeEvent); err != nil {
+				continue
+			}
+
+			// Only transform content_block_delta events
+			if claudeEvent.Type == "content_block_delta" && claudeEvent.Delta != nil {
+				openAIChunk := OpenAIStreamChunk{
+					ID:      "chatcmpl-" + fmt.Sprintf("%d", time.Now().UnixNano()),
+					Object:  "chat.completion.chunk",
+					Created: time.Now().Unix(),
+					Model:   "claude", // Will be filled with actual model
+					Choices: []StreamChoice{
+						{
+							Index: 0,
+							Delta: Delta{
+								Content: claudeEvent.Delta.Text,
+							},
+						},
+					},
+				}
+
+				chunkJSON, _ := json.Marshal(openAIChunk)
+				fmt.Fprintf(w, "data: %s\n\n", chunkJSON)
+				flusher.Flush()
+			}
+		}
+	}
+
+	// Send [DONE]
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+
+	return scanner.Err()
+}
+
+// OpenAIStreamChunk represents a streaming chunk in OpenAI format
+type OpenAIStreamChunk struct {
+	ID      string         `json:"id"`
+	Object  string         `json:"object"`
+	Created int64          `json:"created"`
+	Model   string         `json:"model"`
+	Choices []StreamChoice `json:"choices"`
+}
+
+// StreamChoice represents a choice in a streaming response
+type StreamChoice struct {
+	Index int   `json:"index"`
+	Delta Delta `json:"delta"`
+}
+
+// Delta represents a delta in a streaming response
+type Delta struct {
+	Content string `json:"content,omitempty"`
+	Role    string `json:"role,omitempty"`
 }
