@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -62,6 +63,27 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
+
+	// Check if this is a Claude model
+	if isClaudeModel(model.ModelIdentifier) {
+		log.Printf("[Adaptive Chat] Detected Claude model: %s", model.ModelIdentifier)
+
+		// Transform OpenAI → Claude
+		claudeReq := transformToClaudeFormat(chatReq)
+
+		log.Printf("[Format Transform] OpenAI → Claude: system=%v, messages=%d",
+			len(claudeReq.System) > 0, len(claudeReq.Messages))
+
+		// TODO: Proxy as Claude request
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Claude model proxy not yet implemented",
+		})
+		return
+	}
+
+	log.Printf("[Adaptive Chat] Using OpenAI format for model: %s", model.ModelIdentifier)
 
 	// Find auth config for this model's provider
 	authConfigs, err := r.authConfigStore.List()
