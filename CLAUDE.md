@@ -201,6 +201,18 @@ Requires:
 - Go backend running on port 8080
 - Node.js sidecar running on port 3001
 
+## Claude API Support
+
+Bot Portal natively supports both OpenAI and Claude API formats.
+
+**Endpoints:**
+- `/api/claude` - Native Claude API format (for Claude Code CLI)
+- `/api/chat/completions` - Adaptive format (auto-detects Claude models)
+
+**Model Detection:** Any model name starting with `claude-` is automatically detected and transformed.
+
+See `docs/claude-api.md` for full details.
+
 ## Testing Conventions
 
 - Table-driven tests using Go's standard testing package
