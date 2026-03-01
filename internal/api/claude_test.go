@@ -203,3 +203,203 @@ func TestTransformToClaudeFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestTransformClaudeResponseToOpenAI(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   ClaudeResponse
+		want    OpenAIResponse
+	}{
+		{
+			name: "basic response",
+			input: ClaudeResponse{
+				ID:    "msg_123",
+				Model: "claude-3-5-sonnet-20241022",
+				Content: []ContentBlock{
+					{Type: "text", Text: "Hello!"},
+				},
+				StopReason: "end_turn",
+				Usage: ClaudeUsage{
+					InputTokens:  10,
+					OutputTokens: 5,
+				},
+			},
+			want: OpenAIResponse{
+				ID:      "msg_123",
+				Object:  "chat.completion",
+				Model:   "claude-3-5-sonnet-20241022",
+				Choices: []Choice{
+					{
+						Index: 0,
+						Message: Message{
+							Role:    "assistant",
+							Content: "Hello!",
+						},
+						FinishReason: "stop",
+					},
+				},
+				Usage: Usage{
+					PromptTokens:     10,
+					CompletionTokens: 5,
+					TotalTokens:      15,
+				},
+			},
+		},
+		{
+			name: "max_tokens stop reason",
+			input: ClaudeResponse{
+				ID:    "msg_456",
+				Model: "claude-opus-4-6",
+				Content: []ContentBlock{
+					{Type: "text", Text: "Response text"},
+				},
+				StopReason: "max_tokens",
+				Usage: ClaudeUsage{
+					InputTokens:  20,
+					OutputTokens: 100,
+				},
+			},
+			want: OpenAIResponse{
+				ID:      "msg_456",
+				Object:  "chat.completion",
+				Model:   "claude-opus-4-6",
+				Choices: []Choice{
+					{
+						Index: 0,
+						Message: Message{
+							Role:    "assistant",
+							Content: "Response text",
+						},
+						FinishReason: "length",
+					},
+				},
+				Usage: Usage{
+					PromptTokens:     20,
+					CompletionTokens: 100,
+					TotalTokens:      120,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := transformClaudeResponseToOpenAI(tt.input)
+
+			if got.ID != tt.want.ID {
+				t.Errorf("ID = %v, want %v", got.ID, tt.want.ID)
+			}
+			if got.Object != tt.want.Object {
+				t.Errorf("Object = %v, want %v", got.Object, tt.want.Object)
+			}
+			if got.Model != tt.want.Model {
+				t.Errorf("Model = %v, want %v", got.Model, tt.want.Model)
+			}
+			if len(got.Choices) != len(tt.want.Choices) {
+				t.Fatalf("Choices length = %v, want %v", len(got.Choices), len(tt.want.Choices))
+			}
+			if got.Choices[0].Index != tt.want.Choices[0].Index {
+				t.Errorf("Choices[0].Index = %v, want %v", got.Choices[0].Index, tt.want.Choices[0].Index)
+			}
+			if got.Choices[0].Message.Role != tt.want.Choices[0].Message.Role {
+				t.Errorf("Choices[0].Message.Role = %v, want %v", got.Choices[0].Message.Role, tt.want.Choices[0].Message.Role)
+			}
+			if got.Choices[0].Message.Content != tt.want.Choices[0].Message.Content {
+				t.Errorf("Choices[0].Message.Content = %v, want %v", got.Choices[0].Message.Content, tt.want.Choices[0].Message.Content)
+			}
+			if got.Choices[0].FinishReason != tt.want.Choices[0].FinishReason {
+				t.Errorf("Choices[0].FinishReason = %v, want %v", got.Choices[0].FinishReason, tt.want.Choices[0].FinishReason)
+			}
+			if got.Usage.PromptTokens != tt.want.Usage.PromptTokens {
+				t.Errorf("Usage.PromptTokens = %v, want %v", got.Usage.PromptTokens, tt.want.Usage.PromptTokens)
+			}
+			if got.Usage.CompletionTokens != tt.want.Usage.CompletionTokens {
+				t.Errorf("Usage.CompletionTokens = %v, want %v", got.Usage.CompletionTokens, tt.want.Usage.CompletionTokens)
+			}
+			if got.Usage.TotalTokens != tt.want.Usage.TotalTokens {
+				t.Errorf("Usage.TotalTokens = %v, want %v", got.Usage.TotalTokens, tt.want.Usage.TotalTokens)
+			}
+		})
+	}
+}
+
+func TestExtractTextContent(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   []ContentBlock
+		want    string
+	}{
+		{
+			name: "single text block",
+			input: []ContentBlock{
+				{Type: "text", Text: "Hello, world!"},
+			},
+			want: "Hello, world!",
+		},
+		{
+			name: "multiple blocks - returns first text",
+			input: []ContentBlock{
+				{Type: "text", Text: "First text"},
+				{Type: "text", Text: "Second text"},
+			},
+			want: "First text",
+		},
+		{
+			name: "empty blocks",
+			input: []ContentBlock{},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTextContent(tt.input)
+			if got != tt.want {
+				t.Errorf("extractTextContent() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMapStopReason(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+	}{
+		{
+			name:  "end_turn → stop",
+			input: "end_turn",
+			want:  "stop",
+		},
+		{
+			name:  "max_tokens → length",
+			input: "max_tokens",
+			want:  "length",
+		},
+		{
+			name:  "stop_sequence → stop",
+			input: "stop_sequence",
+			want:  "stop",
+		},
+		{
+			name:  "unknown → stop",
+			input: "unknown_reason",
+			want:  "stop",
+		},
+		{
+			name:  "empty → stop",
+			input: "",
+			want:  "stop",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapStopReason(tt.input)
+			if got != tt.want {
+				t.Errorf("mapStopReason(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}

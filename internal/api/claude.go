@@ -1,6 +1,9 @@
 package api
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // ClaudeRequest represents a request to the Claude API
 type ClaudeRequest struct {
@@ -106,4 +109,83 @@ func transformToClaudeFormat(openAIReq ChatRequest) ClaudeRequest {
 	}
 
 	return claudeReq
+}
+
+// OpenAIResponse represents a response in OpenAI format
+type OpenAIResponse struct {
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
+}
+
+// Choice represents a completion choice
+type Choice struct {
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string  `json:"finish_reason"`
+}
+
+// Message represents a message in a choice
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// Usage represents token usage information
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
+// transformClaudeResponseToOpenAI converts Claude response to OpenAI format
+func transformClaudeResponseToOpenAI(claudeResp ClaudeResponse) OpenAIResponse {
+	return OpenAIResponse{
+		ID:      claudeResp.ID,
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   claudeResp.Model,
+		Choices: []Choice{
+			{
+				Index: 0,
+				Message: Message{
+					Role:    "assistant",
+					Content: extractTextContent(claudeResp.Content),
+				},
+				FinishReason: mapStopReason(claudeResp.StopReason),
+			},
+		},
+		Usage: Usage{
+			PromptTokens:     claudeResp.Usage.InputTokens,
+			CompletionTokens: claudeResp.Usage.OutputTokens,
+			TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
+		},
+	}
+}
+
+// extractTextContent extracts text from content blocks
+func extractTextContent(content []ContentBlock) string {
+	for _, block := range content {
+		if block.Type == "text" {
+			return block.Text
+		}
+	}
+	return ""
+}
+
+// mapStopReason maps Claude stop reason to OpenAI finish reason
+func mapStopReason(claudeReason string) string {
+	switch claudeReason {
+	case "end_turn":
+		return "stop"
+	case "max_tokens":
+		return "length"
+	case "stop_sequence":
+		return "stop"
+	default:
+		return "stop"
+	}
 }
