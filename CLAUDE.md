@@ -171,6 +171,36 @@ npm run build    # Production build
 - **Test Chat**: Interactive chat interface to test models at `/test-chat`
 - **Channels**: A2A communication channels between agents
 
+## CopilotKit Architecture
+
+The project uses a **Node.js sidecar** (`sidecar/`) to bridge the React frontend's CopilotKit integration to the Go backend.
+
+### Why a sidecar?
+
+CopilotKit expects a GraphQL endpoint with a specific schema. Rather than implement GraphQL from scratch in Go, we use a thin Node.js service with `@copilotkit/runtime` that:
+
+1. Accepts GraphQL requests from React frontend
+2. Transforms them to REST calls to Go backend's `/api/copilot/chat/completions`
+3. Streams responses back as GraphQL subscriptions
+
+### Running the sidecar
+
+```bash
+cd sidecar
+npm install
+npm run dev  # Port 3001
+```
+
+### Testing
+
+```bash
+./sidecar/test-sidecar.sh
+```
+
+Requires:
+- Go backend running on port 8080
+- Node.js sidecar running on port 3001
+
 ## Testing Conventions
 
 - Table-driven tests using Go's standard testing package
