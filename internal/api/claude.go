@@ -1,5 +1,7 @@
 package api
 
+import "strings"
+
 // ClaudeRequest represents a request to the Claude API
 type ClaudeRequest struct {
 	Model         string          `json:"model"`
@@ -69,4 +71,9 @@ type ClaudeError struct {
 type ClaudeErrorDetail struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
+}
+
+// isClaudeModel returns true if the model name indicates a Claude model
+func isClaudeModel(modelName string) bool {
+	return strings.HasPrefix(strings.ToLower(modelName), "claude-")
 }

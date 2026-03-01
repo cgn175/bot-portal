@@ -61,3 +61,46 @@ func TestClaudeResponse_Unmarshal(t *testing.T) {
 		t.Errorf("Expected text='Hello!', got '%s'", resp.Content[0].Text)
 	}
 }
+
+func TestIsClaudeModel(t *testing.T) {
+	tests := []struct {
+		name      string
+		modelName string
+		want      bool
+	}{
+		{
+			name:      "claude-3-5-sonnet",
+			modelName: "claude-3-5-sonnet-20241022",
+			want:      true,
+		},
+		{
+			name:      "claude-opus-4-6",
+			modelName: "claude-opus-4-6",
+			want:      true,
+		},
+		{
+			name:      "uppercase CLAUDE",
+			modelName: "CLAUDE-OPUS-4-6",
+			want:      true,
+		},
+		{
+			name:      "gpt-4",
+			modelName: "gpt-4",
+			want:      false,
+		},
+		{
+			name:      "empty string",
+			modelName: "",
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isClaudeModel(tt.modelName)
+			if got != tt.want {
+				t.Errorf("isClaudeModel(%q) = %v, want %v", tt.modelName, got, tt.want)
+			}
+		})
+	}
+}
