@@ -9,12 +9,16 @@ interface CopilotProviderProps {
 /**
  * CopilotProvider wraps the app with CopilotKit configured for self-hosted runtime.
  *
- * Uses `/api/copilot` instead of Copilot Cloud - connects to our Go backend
- * which proxies to our configured models and auth configs.
+ * Connects to Node.js sidecar (port 3001) which bridges to Go backend.
  */
 export function CopilotProvider({ children }: CopilotProviderProps) {
+  const runtimeUrl = import.meta.env.VITE_COPILOT_RUNTIME_URL || 'http://localhost:3001/copilot';
+
   return (
-    <CopilotKit runtimeUrl="/api/copilot">
+    <CopilotKit
+      runtimeUrl={runtimeUrl}
+      showDevConsole={import.meta.env.DEV}
+    >
       {children}
     </CopilotKit>
   );
