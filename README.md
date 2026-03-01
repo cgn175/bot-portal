@@ -313,9 +313,28 @@ docker-compose -f docker-compose.test.yml down
 
 ### Development with CopilotKit
 
-The project uses a Node.js sidecar to bridge CopilotKit's GraphQL protocol to the Go backend.
+The project uses a **Node.js sidecar** to bridge CopilotKit's GraphQL protocol to the Go backend.
+
+#### Why a Sidecar?
+
+CopilotKit expects a GraphQL endpoint implementing their specific schema. Rather than implement GraphQL from scratch in Go, we use a thin Node.js service that:
+1. Accepts GraphQL requests from the React frontend
+2. Transforms them to REST calls to our Go backend's `/api/copilot/chat/completions`
+3. Streams responses back as GraphQL subscriptions
+4. Delegates all business logic to the Go backend (sidecar is stateless)
+
+#### Setup
+
+First time setup:
+
+```bash
+# Install sidecar dependencies
+cd sidecar && npm install
+```
 
 #### Start all services:
+
+**Option 1: Manual (3 terminals)**
 
 ```bash
 # Terminal 1: Go backend
@@ -328,17 +347,87 @@ cd sidecar && npm run dev
 cd web && npm run dev
 ```
 
-Or use the combined command:
+**Option 2: All-in-one command**
 
 ```bash
 make dev-all
 ```
 
+Then open http://localhost:5173
+
+#### Environment Variables
+
+**Sidecar** (`sidecar/.env`):
+```bash
+COPILOT_PORT=3001                      # Sidecar server port
+BACKEND_URL=http://localhost:8080      # Go backend URL
+CORS_ORIGIN=http://localhost:5173      # React dev server URL
+```
+
+**Frontend** (`web/.env`):
+```bash
+VITE_COPILOT_RUNTIME_URL=http://localhost:3001/copilot
+```
+
+#### Verification
+
+Test the sidecar is working:
+
+```bash
+# Run automated tests (requires backend + sidecar running)
+./sidecar/test-sidecar.sh
+```
+
+Expected output:
+```
+✓ Health check passed
+✓ GraphQL endpoint responding
+✓ Backend reachable
+```
+
 #### Architecture
 
 ```
-React Frontend (:5173) → CopilotKit → Sidecar (:3001) → Go Backend (:8080) → LLM Providers
+┌─────────────────────────────────────────┐
+│  React Frontend (port 5173)             │
+│  - CopilotKit UI (chat popup)           │
+│  - useCopilotAction hooks               │
+│  - useCopilotReadable context           │
+└──────────────┬──────────────────────────┘
+               │ GraphQL + SSE
+               ↓
+┌─────────────────────────────────────────┐
+│  Node.js Sidecar (port 3001)            │
+│  - CopilotRuntime (GraphQL server)      │
+│  - BackendChatAdapter (HTTP client)     │
+│  - Message format transformation        │
+└──────────────┬──────────────────────────┘
+               │ HTTP POST (SSE streaming)
+               ↓
+┌─────────────────────────────────────────┐
+│  Go Backend (port 8080)                 │
+│  - /api/copilot/chat/completions        │
+│  - Model selection + auth               │
+│  - Provider routing                     │
+└──────────────┬──────────────────────────┘
+               │ Proxied LLM requests
+               ↓
+┌─────────────────────────────────────────┐
+│  LLM Providers                          │
+│  (OpenAI, Anthropic, Kimi, etc.)        │
+└─────────────────────────────────────────┘
 ```
+
+#### Features Enabled
+
+With CopilotKit + sidecar, you can:
+- **Chat with AI** in the frontend using your configured models
+- **Ask about state**: "What agents do I have?", "List my models"
+- **Execute actions**: "Create an agent called demo-agent", "Start agent-1"
+- **Navigate UI**: "Go to the models page", "Show me auth configs"
+- **Streaming responses**: Real-time word-by-word streaming from LLMs
+
+See `docs/plans/copilotkit-sidecar-testing.md` for full testing guide.
 
 ### Project Structure
 
