@@ -311,6 +311,35 @@ go test -v ./integration_test.go
 docker-compose -f docker-compose.test.yml down
 ```
 
+### Development with CopilotKit
+
+The project uses a Node.js sidecar to bridge CopilotKit's GraphQL protocol to the Go backend.
+
+#### Start all services:
+
+```bash
+# Terminal 1: Go backend
+make run
+
+# Terminal 2: Node.js sidecar
+cd sidecar && npm run dev
+
+# Terminal 3: React frontend
+cd web && npm run dev
+```
+
+Or use the combined command:
+
+```bash
+make dev-all
+```
+
+#### Architecture
+
+```
+React Frontend (:5173) → CopilotKit → Sidecar (:3001) → Go Backend (:8080) → LLM Providers
+```
+
 ### Project Structure
 
 ```
