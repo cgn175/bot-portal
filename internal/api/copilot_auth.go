@@ -6,11 +6,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/models"
 )
+
+// copilotTokenRefreshBuffer is the time before expiration to proactively refresh.
+const copilotTokenRefreshBuffer = 5 * time.Minute
 
 // GitHub OAuth Device Flow constants
 const (
@@ -277,21 +281,10 @@ func (r *Router) handleCopilotModels(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Parse credentials to get Copilot API key
-	var creds map[string]string
-	if err := json.Unmarshal([]byte(config.Credentials), &creds); err != nil {
-		http.Error(w, "Failed to parse credentials", http.StatusInternalServerError)
-		return
-	}
-
-	// Use the Copilot API key (not the GitHub access token)
-	apiKey := creds["copilot_api_key"]
-	if apiKey == "" {
-		// Fallback to access_token for backwards compatibility
-		apiKey = creds["access_token"]
-	}
-	if apiKey == "" {
-		http.Error(w, "No API key found in auth config", http.StatusBadRequest)
+	// Get a fresh Copilot API key (refreshes automatically if near expiry)
+	apiKey, err := r.ensureFreshCopilotToken(config)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get Copilot API key: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -452,4 +445,73 @@ func exchangeForCopilotAPIKey(accessToken string) (*CopilotAPIKeyResponse, error
 	}
 
 	return &apiKeyResp, nil
+}
+
+// ensureFreshCopilotToken checks whether the Copilot API key in the given auth
+// config is near expiration and refreshes it using the stored long-lived PAT if
+// needed. Returns the valid copilot_api_key. The config's Credentials field is
+// updated in-place and persisted to the store on refresh.
+func (r *Router) ensureFreshCopilotToken(config *models.AuthConfig) (string, error) {
+	var creds map[string]string
+	if err := json.Unmarshal([]byte(config.Credentials), &creds); err != nil {
+		return "", fmt.Errorf("failed to parse credentials: %w", err)
+	}
+
+	apiKey := creds["copilot_api_key"]
+	accessToken := creds["access_token"]
+
+	if accessToken == "" {
+		if apiKey != "" {
+			return apiKey, nil
+		}
+		return "", fmt.Errorf("no copilot_api_key or access_token in credentials")
+	}
+
+	// Check expiration – skip refresh if the token is still fresh
+	if expiresAtStr := creds["expires_at"]; expiresAtStr != "" && apiKey != "" {
+		expiresAt, err := strconv.ParseInt(expiresAtStr, 10, 64)
+		if err == nil && time.Now().Add(copilotTokenRefreshBuffer).Before(time.Unix(expiresAt, 0)) {
+			return apiKey, nil
+		}
+		log.Printf("[copilot-auth] token for %s near expiry, refreshing", config.ID)
+	} else if apiKey == "" {
+		log.Printf("[copilot-auth] no copilot_api_key for %s, exchanging", config.ID)
+	}
+
+	return r.refreshCopilotToken(config, accessToken)
+}
+
+// refreshCopilotToken exchanges the long-lived GitHub PAT for a fresh Copilot
+// API key and persists the updated credentials to the store.
+func (r *Router) refreshCopilotToken(config *models.AuthConfig, accessToken string) (string, error) {
+	copilotResp, err := exchangeForCopilotAPIKey(accessToken)
+	if err != nil {
+		return "", fmt.Errorf("copilot token refresh failed: %w", err)
+	}
+
+	var creds map[string]string
+	if err := json.Unmarshal([]byte(config.Credentials), &creds); err != nil {
+		creds = make(map[string]string)
+	}
+	creds["copilot_api_key"] = copilotResp.Token
+	creds["expires_at"] = fmt.Sprintf("%d", copilotResp.ExpiresAt)
+
+	credJSON, err := json.Marshal(creds)
+	if err != nil {
+		return copilotResp.Token, nil
+	}
+
+	config.Credentials = string(credJSON)
+	config.UpdatedAt = time.Now()
+	if copilotResp.Endpoints.API != "" {
+		config.EndpointURL = copilotResp.Endpoints.API
+	}
+
+	if err := r.authConfigStore.Update(config); err != nil {
+		log.Printf("[copilot-auth] failed to persist refreshed token for %s: %v", config.ID, err)
+	} else {
+		log.Printf("[copilot-auth] refreshed token for %s (expires_at: %d)", config.ID, copilotResp.ExpiresAt)
+	}
+
+	return copilotResp.Token, nil
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeroclaw/bot-portal/internal/models"
 	"github.com/zeroclaw/bot-portal/internal/provider"
 )
 
@@ -66,24 +67,33 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 	}
 
 	var token, baseURL string
+	var copilotAuth *models.AuthConfig // tracked for 401/403 retry
 	for _, auth := range authConfigs {
 		if auth.Provider == model.Provider || (model.Provider == "copilot" && auth.AuthType == "github_copilot_oauth") {
-			var creds map[string]string
-			if err := json.Unmarshal([]byte(auth.Credentials), &creds); err != nil {
-				continue
-			}
-
 			baseURL = auth.EndpointURL
 
 			if auth.AuthType == "github_copilot_oauth" {
-				token = creds["copilot_api_key"]
-				if token == "" {
-					token = creds["access_token"]
+				copilotAuth = auth
+				var refreshErr error
+				token, refreshErr = r.ensureFreshCopilotToken(auth)
+				if refreshErr != nil {
+					// Fall back to stored values
+					var creds map[string]string
+					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err == nil {
+						token = creds["copilot_api_key"]
+						if token == "" {
+							token = creds["access_token"]
+						}
+					}
 				}
 				if baseURL == "" {
 					baseURL = "https://api.githubcopilot.com"
 				}
 			} else {
+				var creds map[string]string
+				if err := json.Unmarshal([]byte(auth.Credentials), &creds); err != nil {
+					continue
+				}
 				token = creds["api_key"]
 				baseURL = strings.TrimRight(auth.EndpointURL, "/")
 			}
@@ -133,13 +143,36 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		http.Error(w, fmt.Sprintf("Failed to make request: %v", err), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
 
-	// Read and proxy the response
 	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
 	if err != nil {
 		http.Error(w, "Failed to read response", http.StatusInternalServerError)
 		return
+	}
+
+	// On 401/403 for Copilot, refresh the token and retry once
+	if copilotAuth != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+		var creds map[string]string
+		if err := json.Unmarshal([]byte(copilotAuth.Credentials), &creds); err == nil {
+			if newToken, err := r.refreshCopilotToken(copilotAuth, creds["access_token"]); err == nil {
+				retryReq, _ := http.NewRequest(http.MethodPost, endpointURL, bytes.NewReader(payloadBytes))
+				h, v := provider.GetAuthHeader(model.Provider, newToken)
+				retryReq.Header.Set(h, v)
+				retryReq.Header.Set("Content-Type", "application/json")
+				retryReq.Header.Set("Accept", "application/json")
+				applyProviderHeaders(retryReq, model.Provider, baseURL)
+
+				if retryResp, err := client.Do(retryReq); err == nil {
+					retryBody, readErr := io.ReadAll(retryResp.Body)
+					retryResp.Body.Close()
+					if readErr == nil {
+						body = retryBody
+						resp = retryResp
+					}
+				}
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

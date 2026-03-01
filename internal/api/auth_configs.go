@@ -320,9 +320,13 @@ func (r *Router) discoverModels(config *models.AuthConfig) (*modelsResponse, str
 	// Determine token, baseURL, and provider based on auth type
 	var token, baseURL, providerID string
 	if config.AuthType == "github_copilot_oauth" {
-		token = creds["copilot_api_key"]
-		if token == "" {
-			token = creds["access_token"]
+		var refreshErr error
+		token, refreshErr = r.ensureFreshCopilotToken(config)
+		if refreshErr != nil {
+			token = creds["copilot_api_key"]
+			if token == "" {
+				token = creds["access_token"]
+			}
 		}
 		baseURL = config.EndpointURL
 		if baseURL == "" {
