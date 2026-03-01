@@ -125,6 +125,9 @@ func (r *Router) Run(addr string) error {
 	mux.HandleFunc("/api/providers", r.handleProviders)
 	mux.HandleFunc("/api/providers/", r.handleProviderDetail)
 
+	// Claude API endpoint
+	mux.HandleFunc("POST /api/claude", r.handleClaudeMessages)
+
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("OK"))

@@ -1,6 +1,10 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -188,4 +192,35 @@ func mapStopReason(claudeReason string) string {
 	default:
 		return "stop"
 	}
+}
+
+// handleClaudeMessages handles POST /api/claude
+func (r *Router) handleClaudeMessages(w http.ResponseWriter, req *http.Request) {
+	// Log request details (user requirement: "with log detail about the request of claude code")
+	log.Printf("[Claude API] Request: method=%s, path=%s, remote=%s",
+		req.Method, req.URL.Path, req.RemoteAddr)
+
+	// Parse Claude request
+	var claudeReq ClaudeRequest
+	if err := json.NewDecoder(req.Body).Decode(&claudeReq); err != nil {
+		log.Printf("[Claude API] Failed to parse request: %v", err)
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Log request details
+	log.Printf("[Claude API] Request details: model=%s, messages=%d, stream=%v, max_tokens=%d",
+		claudeReq.Model, len(claudeReq.Messages), claudeReq.Stream, claudeReq.MaxTokens)
+
+	if claudeReq.System != "" {
+		log.Printf("[Claude API] System message: %s", claudeReq.System)
+	}
+
+	// TODO: Implement provider proxy
+	// For now, return 501 Not Implemented
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": "Provider proxy not yet implemented",
+	})
 }

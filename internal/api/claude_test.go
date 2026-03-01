@@ -1,7 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -401,5 +404,38 @@ func TestMapStopReason(t *testing.T) {
 				t.Errorf("mapStopReason(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestHandleClaudeMessages(t *testing.T) {
+	router := &Router{}
+
+	// Test basic Claude request parsing
+	reqBody := `{
+		"model": "claude-3-5-sonnet-20241022",
+		"messages": [
+			{"role": "user", "content": "Hello"}
+		],
+		"max_tokens": 1024,
+		"stream": false
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/claude", bytes.NewReader([]byte(reqBody)))
+	rr := httptest.NewRecorder()
+
+	router.handleClaudeMessages(rr, req)
+
+	// Expect 501 Not Implemented (proxy not yet implemented)
+	if rr.Code != 501 {
+		t.Errorf("Expected status 501, got %d", rr.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if resp["error"] != "Provider proxy not yet implemented" {
+		t.Errorf("Expected 'Provider proxy not yet implemented', got %v", resp["error"])
 	}
 }
