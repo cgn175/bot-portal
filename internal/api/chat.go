@@ -15,8 +15,12 @@ import (
 
 // ChatRequest represents a chat completion request
 type ChatRequest struct {
-	Model    string        `json:"model"`
-	Messages []ChatMessage `json:"messages"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
+	Temperature *float64      `json:"temperature,omitempty"`
+	TopP        *float64      `json:"top_p,omitempty"`
+	Stream      bool          `json:"stream,omitempty"`
 }
 
 // ChatMessage represents a single message in the conversation

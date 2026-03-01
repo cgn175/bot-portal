@@ -77,3 +77,33 @@ type ClaudeErrorDetail struct {
 func isClaudeModel(modelName string) bool {
 	return strings.HasPrefix(strings.ToLower(modelName), "claude-")
 }
+
+// transformToClaudeFormat converts OpenAI ChatRequest to Claude format
+func transformToClaudeFormat(openAIReq ChatRequest) ClaudeRequest {
+	claudeReq := ClaudeRequest{
+		Model:       openAIReq.Model,
+		MaxTokens:   openAIReq.MaxTokens,
+		Messages:    []ClaudeMessage{},
+		Stream:      openAIReq.Stream,
+		Temperature: openAIReq.Temperature,
+		TopP:        openAIReq.TopP,
+	}
+
+	// Extract system message and filter out from messages array
+	for _, msg := range openAIReq.Messages {
+		if msg.Role == "system" {
+			// Use first system message only
+			if claudeReq.System == "" {
+				claudeReq.System = msg.Content
+			}
+		} else {
+			// Keep user and assistant messages
+			claudeReq.Messages = append(claudeReq.Messages, ClaudeMessage{
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		}
+	}
+
+	return claudeReq
+}

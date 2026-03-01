@@ -104,3 +104,102 @@ func TestIsClaudeModel(t *testing.T) {
 		})
 	}
 }
+
+func TestTransformToClaudeFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   ChatRequest
+		want    ClaudeRequest
+	}{
+		{
+			name: "extract system message",
+			input: ChatRequest{
+				Model: "claude-3-5-sonnet-20241022",
+				Messages: []ChatMessage{
+					{Role: "system", Content: "You are a helpful assistant."},
+					{Role: "user", Content: "Hello"},
+					{Role: "assistant", Content: "Hi there!"},
+				},
+				MaxTokens: 1024,
+				Stream:    false,
+			},
+			want: ClaudeRequest{
+				Model:     "claude-3-5-sonnet-20241022",
+				System:    "You are a helpful assistant.",
+				Messages: []ClaudeMessage{
+					{Role: "user", Content: "Hello"},
+					{Role: "assistant", Content: "Hi there!"},
+				},
+				MaxTokens: 1024,
+				Stream:    false,
+			},
+		},
+		{
+			name: "no system message",
+			input: ChatRequest{
+				Model: "claude-3-5-sonnet-20241022",
+				Messages: []ChatMessage{
+					{Role: "user", Content: "Hello"},
+				},
+				MaxTokens: 2048,
+			},
+			want: ClaudeRequest{
+				Model: "claude-3-5-sonnet-20241022",
+				Messages: []ClaudeMessage{
+					{Role: "user", Content: "Hello"},
+				},
+				MaxTokens: 2048,
+			},
+		},
+		{
+			name: "multiple system messages",
+			input: ChatRequest{
+				Model: "claude-3-5-sonnet-20241022",
+				Messages: []ChatMessage{
+					{Role: "system", Content: "First system message"},
+					{Role: "system", Content: "Second system message"},
+					{Role: "user", Content: "Hello"},
+				},
+				MaxTokens: 1024,
+			},
+			want: ClaudeRequest{
+				Model:  "claude-3-5-sonnet-20241022",
+				System: "First system message",
+				Messages: []ClaudeMessage{
+					{Role: "user", Content: "Hello"},
+				},
+				MaxTokens: 1024,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := transformToClaudeFormat(tt.input)
+
+			if got.Model != tt.want.Model {
+				t.Errorf("Model = %v, want %v", got.Model, tt.want.Model)
+			}
+			if got.System != tt.want.System {
+				t.Errorf("System = %v, want %v", got.System, tt.want.System)
+			}
+			if got.MaxTokens != tt.want.MaxTokens {
+				t.Errorf("MaxTokens = %v, want %v", got.MaxTokens, tt.want.MaxTokens)
+			}
+			if got.Stream != tt.want.Stream {
+				t.Errorf("Stream = %v, want %v", got.Stream, tt.want.Stream)
+			}
+			if len(got.Messages) != len(tt.want.Messages) {
+				t.Fatalf("Messages length = %v, want %v", len(got.Messages), len(tt.want.Messages))
+			}
+			for i := range got.Messages {
+				if got.Messages[i].Role != tt.want.Messages[i].Role {
+					t.Errorf("Messages[%d].Role = %v, want %v", i, got.Messages[i].Role, tt.want.Messages[i].Role)
+				}
+				if got.Messages[i].Content != tt.want.Messages[i].Content {
+					t.Errorf("Messages[%d].Content = %v, want %v", i, got.Messages[i].Content, tt.want.Messages[i].Content)
+				}
+			}
+		})
+	}
+}
