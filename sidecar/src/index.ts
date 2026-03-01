@@ -8,6 +8,8 @@ import { BackendRuntimeAdapter } from './runtime-adapter.js';
 
 const app = express();
 
+app.use(express.json());
+
 app.use(cors({
   origin: config.corsOrigin,
   credentials: true,
@@ -21,14 +23,15 @@ app.get('/health', (req, res) => {
 const backendAdapter = new BackendChatAdapter();
 const serviceAdapter = new BackendRuntimeAdapter(backendAdapter);
 
-app.use('/copilot', (req, res) => {
-  const runtime = new CopilotRuntime({
-    serviceAdapter: serviceAdapter,
-  });
+const runtime = new CopilotRuntime({
+  actions: [],
+});
 
+app.post('/copilot', (req, res) => {
   const handler = copilotRuntimeNodeHttpEndpoint({
     endpoint: '/copilot',
     runtime,
+    serviceAdapter
   });
 
   return handler(req, res);
