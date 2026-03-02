@@ -15,7 +15,7 @@ export interface ChatRequest {
 
 /**
  * BackendChatAdapter forwards chat requests to the Go backend's
- * /api/copilot/chat/completions endpoint and streams back responses.
+ * /api/copilotkit/chat/completions endpoint and streams back responses.
  */
 export class BackendChatAdapter {
   private backendUrl: string;
@@ -29,7 +29,7 @@ export class BackendChatAdapter {
    * Returns async generator that yields SSE chunks.
    */
   async *streamChatCompletion(request: ChatRequest): AsyncGenerator<string> {
-    const url = `${this.backendUrl}/api/copilot/chat/completions`;
+    const url = `${this.backendUrl}/api/copilotkit/chat/completions`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -85,7 +85,7 @@ export class BackendChatAdapter {
    * Get available models from backend.
    */
   async getAvailableModels(): Promise<any[]> {
-    const url = `${this.backendUrl}/api/copilot/info`;
+    const url = `${this.backendUrl}/api/copilotkit/info`;
     const response = await fetch(url);
 
     if (!response.ok) {

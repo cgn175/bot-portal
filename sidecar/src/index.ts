@@ -27,9 +27,9 @@ const runtime = new CopilotRuntime({
   actions: [],
 });
 
-app.post('/copilot', (req, res) => {
+app.post('/copilotkit', (req, res) => {
   const handler = copilotRuntimeNodeHttpEndpoint({
-    endpoint: '/copilot',
+    endpoint: '/copilotkit',
     runtime,
     serviceAdapter
   });

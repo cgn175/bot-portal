@@ -129,7 +129,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
 
       // If "Set as CopilotKit default" was checked, save to localStorage
       if (setCopilotDefault) {
-        localStorage.setItem('copilot_default_model', formData.id)
+        localStorage.setItem('copilotkit_default_model', formData.id)
       }
 
       onSuccess()

@@ -24,7 +24,7 @@ type CopilotChatRequest struct {
 	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
 }
 
-// handleCopilotChat handles POST /api/copilot/chat/completions
+// handleCopilotChat handles POST /api/copilotkit/chat/completions
 // It implements the CopilotKit self-hosted runtime protocol:
 // 1. Resolves the model (requested or default)
 // 2. Injects system prompt with Bot Portal context

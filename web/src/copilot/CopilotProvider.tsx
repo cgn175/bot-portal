@@ -12,10 +12,10 @@ interface CopilotProviderProps {
  * Connects to Node.js sidecar (port 3001) which bridges to Go backend.
  */
 export function CopilotProvider({ children }: CopilotProviderProps) {
-  const runtimeUrl = import.meta.env.VITE_COPILOT_RUNTIME_URL || 'http://localhost:3001/copilot';
+  const runtimeUrl = import.meta.env.VITE_COPILOT_RUNTIME_URL || 'http://localhost:3001/copilotkit';
 
   // Get default model from localStorage (set in ModelForm when "Set as CopilotKit default" is checked)
-  const defaultModel = localStorage.getItem('copilot_default_model') || undefined;
+  const defaultModel = localStorage.getItem('copilotkit_default_model') || undefined;
 
   return (
     <CopilotKit
