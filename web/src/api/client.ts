@@ -429,6 +429,23 @@ class ApiClient {
     }
     return res.json()
   }
+
+  // CopilotKit Settings
+  async getCopilotKitSettings(): Promise<{ defaultModel: string }> {
+    const res = await fetch(`${this.baseUrl}/api/copilotkit/settings`)
+    if (!res.ok) throw new Error('Failed to fetch CopilotKit settings')
+    return res.json()
+  }
+
+  async updateCopilotKitSettings(defaultModel: string): Promise<{ defaultModel: string }> {
+    const res = await fetch(`${this.baseUrl}/api/copilotkit/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaultModel })
+    })
+    if (!res.ok) throw new Error('Failed to update CopilotKit settings')
+    return res.json()
+  }
 }
 
 export interface ChatCompletionResponse {

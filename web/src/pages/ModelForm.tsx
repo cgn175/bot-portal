@@ -127,9 +127,9 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
         await api.createModel(submitData)
       }
 
-      // If "Set as CopilotKit default" was checked, save to localStorage
+      // If "Set as CopilotKit default" was checked, save to backend
       if (setCopilotDefault) {
-        localStorage.setItem('copilotkit_default_model', formData.id)
+        await api.updateCopilotKitSettings(formData.id)
       }
 
       onSuccess()
