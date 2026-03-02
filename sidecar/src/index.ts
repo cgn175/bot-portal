@@ -40,4 +40,5 @@ app.post('/copilot', (req, res) => {
 app.listen(config.port, () => {
   console.log(`CopilotKit sidecar running on http://localhost:${config.port}`);
   console.log(`Backend URL: ${config.backendUrl}`);
+  console.log(`Default model: ${config.defaultModel}`);
 });

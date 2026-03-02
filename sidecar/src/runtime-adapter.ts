@@ -5,6 +5,7 @@ import {
 } from '@copilotkit/runtime';
 import { randomUUID } from 'crypto';
 import { BackendChatAdapter } from './backend-adapter.js';
+import { config } from './config.js';
 
 /**
  * Adapter that bridges CopilotKit's runtime to our Go backend.
@@ -14,7 +15,9 @@ export class BackendRuntimeAdapter implements CopilotServiceAdapter {
   provider = 'bot-portal-backend';
   model?: string;
 
-  constructor(private backendAdapter: BackendChatAdapter) {}
+  constructor(private backendAdapter: BackendChatAdapter, defaultModel?: string) {
+    this.model = defaultModel || config.defaultModel;
+  }
 
   async process(request: CopilotRuntimeChatCompletionRequest): Promise<CopilotRuntimeChatCompletionResponse> {
     const { messages, model, threadId: threadIdFromRequest, eventSource } = request;
