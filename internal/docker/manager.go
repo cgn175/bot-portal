@@ -23,7 +23,7 @@ type Manager struct {
 	cli *client.Client
 }
 
-const ZEROCLAW_WORK_DIR = "zeroclaw-data"
+const ZEROCLAW_WORK_DIR = "/zeroclaw-data"
 
 // NewManager creates a new Docker manager.
 // It resolves the active Docker context (e.g., Docker Desktop vs Podman) to
