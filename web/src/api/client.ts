@@ -438,6 +438,35 @@ class ApiClient {
     if (!res.ok) throw new Error('Failed to fetch CopilotKit settings')
     return res.json()
   }
+
+  // ============================================================================
+  // Identity Files Management
+  // ============================================================================
+
+  async getAgentIdentityFiles(agentId: string): Promise<AgentIdentityFilesResponse> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files`)
+    if (!res.ok) throw new Error('Failed to fetch identity files')
+    return res.json()
+  }
+
+  async getIdentityFile(agentId: string, filename: string): Promise<{ filename: string; content: string }> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files/${encodeURIComponent(filename)}`)
+    if (!res.ok) throw new Error(`Failed to fetch identity file ${filename}`)
+    return res.json()
+  }
+
+  async updateIdentityFile(agentId: string, filename: string, content: string): Promise<UpdateIdentityFileResponse> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files/${encodeURIComponent(filename)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    })
+    if (!res.ok) {
+      const error = await res.text()
+      throw new Error(error || `Failed to update identity file ${filename}`)
+    }
+    return res.json()
+  }
 }
 
 export interface ChatCompletionResponse {
@@ -450,6 +479,39 @@ export interface ChatCompletionResponse {
   error?: {
     message: string
   }
+}
+
+// ============================================================================
+// Identity File Types
+// ============================================================================
+
+export interface AgentIdentityFile {
+  id: number
+  agentId: string
+  filename: string
+  content: string
+  charCount: number
+  updatedAt: string
+}
+
+export interface AgentIdentityFileInfo {
+  filename: string
+  charCount: number
+  updatedAt: string
+}
+
+export interface AgentIdentityFilesResponse {
+  files: AgentIdentityFileInfo[]
+}
+
+export interface UpdateIdentityFileRequest {
+  content: string
+}
+
+export interface UpdateIdentityFileResponse {
+  success: boolean
+  filename: string
+  charCount: number
 }
 
 export const api = new ApiClient()

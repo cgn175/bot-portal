@@ -15,6 +15,7 @@ A web portal for managing multiple AI agents running as Docker or Podman contain
 - **25+ AI Providers**: Pre-configured support for OpenAI, Anthropic, Kimi, DeepSeek, GLM, MiniMax, Qwen, and more
 - **Auto Model Discovery**: Automatically fetch available models from provider endpoints
 - **Test Chat**: Interactive chat interface to test models directly in the portal
+- **Agent Identity Editor**: Edit ZeroClaw identity files (IDENTITY.md, SOUL.md, AGENTS.md, USER.md, TOOLS.md) — changes apply instantly without restarting
 - **REST API**: Full HTTP API for portal management
 - **React Frontend**: Web dashboard for monitoring and control
 
@@ -171,6 +172,26 @@ GET /api/agents/{id}?action=stop
 # Restart agent
 GET /api/agents/{id}?action=restart
 ```
+
+### Agent Identity Files
+
+```bash
+# List identity files for an agent
+GET /api/agents/{id}/identity-files
+
+# Get identity file content
+GET /api/agents/{id}/identity-files/{filename}
+
+# Update identity file (creates if not exists)
+PUT /api/agents/{id}/identity-files/{filename}
+{
+  "content": "# SOUL.md — Who You Are\n\nBe helpful and direct."
+}
+```
+
+**Supported files:** `IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `USER.md`, `TOOLS.md`
+
+Changes are saved to the database and synced to running containers automatically. ZeroClaw reads these files on every message turn, so changes take effect immediately — no agent restart needed.
 
 ### Models
 

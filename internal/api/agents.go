@@ -13,12 +13,36 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
 	"github.com/zeroclaw/bot-portal/internal/docker"
+	"github.com/zeroclaw/bot-portal/internal/models"
 	"github.com/zeroclaw/bot-portal/internal/store"
 )
+
+// ============================================================================
+// Types
+// ============================================================================
+
+// AgentIdentityFilesResponse represents the response for listing agent identity files
+type AgentIdentityFilesResponse struct {
+	Files []AgentIdentityFileInfo `json:"files"`
+}
+
+// AgentIdentityFileInfo represents metadata for an identity file (without content)
+type AgentIdentityFileInfo struct {
+	Filename  string    `json:"filename"`
+	CharCount int       `json:"charCount"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// UpdateIdentityFileRequest represents a request to update an identity file
+type UpdateIdentityFileRequest struct {
+	Content string `json:"content"`
+}
 
 // ============================================================================
 // Agent Handlers
@@ -767,4 +791,223 @@ func (r *Router) streamAgents(w http.ResponseWriter, req *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// ============================================================================
+// Identity File Handlers
+// ============================================================================
+
+// handleAgentIdentityFiles handles GET /api/agents/{id}/identity-files
+func (r *Router) handleAgentIdentityFiles(w http.ResponseWriter, req *http.Request) {
+	// Parse agent ID from path
+	path := req.URL.Path
+	prefix := "/api/agents/"
+	suffix := "/identity-files"
+
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	agentID := path[len(prefix) : len(path)-len(suffix)]
+	if agentID == "" {
+		http.Error(w, "Agent ID required", http.StatusBadRequest)
+		return
+	}
+
+	// Verify agent exists
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if agent == nil {
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		r.listIdentityFiles(w, req, agentID)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleAgentIdentityFileDetail handles PUT /api/agents/{id}/identity-files/{filename}
+func (r *Router) handleAgentIdentityFileDetail(w http.ResponseWriter, req *http.Request) {
+	// Parse path: /api/agents/{id}/identity-files/{filename}
+	path := req.URL.Path
+	prefix := "/api/agents/"
+
+	if !strings.HasPrefix(path, prefix) {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	// Remove prefix and split remaining path
+	remaining := path[len(prefix):]
+	parts := strings.SplitN(remaining, "/identity-files/", 2)
+	if len(parts) != 2 {
+		http.Error(w, "Invalid path format", http.StatusBadRequest)
+		return
+	}
+
+	agentID := parts[0]
+	filename := parts[1]
+
+	log.Printf("Identity file request: agentID=%q filename=%q method=%s", agentID, filename, req.Method)
+
+	if agentID == "" {
+		http.Error(w, "Agent ID required", http.StatusBadRequest)
+		return
+	}
+	if filename == "" {
+		http.Error(w, "Filename required", http.StatusBadRequest)
+		return
+	}
+
+	// Verify agent exists
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil {
+		log.Printf("Identity file: error looking up agent %q: %v", agentID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if agent == nil {
+		log.Printf("Identity file: agent %q not found", agentID)
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+
+	switch req.Method {
+	case http.MethodGet:
+		r.getIdentityFile(w, req, agentID, filename)
+	case http.MethodPut:
+		r.updateIdentityFile(w, req, agentID, filename)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// listIdentityFiles lists all identity files for an agent
+func (r *Router) listIdentityFiles(w http.ResponseWriter, req *http.Request, agentID string) {
+	// Get files from database
+	identityFileStore := store.NewIdentityFileStore(r.db)
+	files, err := identityFileStore.ListByAgent(agentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Build response with metadata (without full content for list)
+	response := AgentIdentityFilesResponse{
+		Files: make([]AgentIdentityFileInfo, len(files)),
+	}
+	for i, f := range files {
+		response.Files[i] = AgentIdentityFileInfo{
+			Filename:  f.Filename,
+			CharCount: f.CharCount,
+			UpdatedAt: f.UpdatedAt,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// getIdentityFile reads the current content of an identity file
+func (r *Router) getIdentityFile(w http.ResponseWriter, req *http.Request, agentID, filename string) {
+	// If agent is running, read from Docker container
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var content []byte
+	if agent.Status == "running" && agent.ContainerID != "" {
+		// Read from container
+		ctx := req.Context()
+		content, err = r.dockerMgr.ReadWorkspaceFile(ctx, agentID, filename)
+		if err != nil {
+			// If file doesn't exist in container, fall back to database
+			if !strings.Contains(err.Error(), "not found") {
+				log.Printf("Failed to read from container, falling back to DB: %v", err)
+			}
+		}
+	}
+
+	// If not running or container read failed, read from database
+	if content == nil {
+		identityFileStore := store.NewIdentityFileStore(r.db)
+		file, err := identityFileStore.GetByAgentAndFilename(agentID, filename)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if file != nil {
+			content = []byte(file.Content)
+		}
+	}
+
+	// Return file content
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"filename": filename,
+		"content":  string(content),
+	})
+}
+
+// updateIdentityFile updates the content of an identity file
+func (r *Router) updateIdentityFile(w http.ResponseWriter, req *http.Request, agentID, filename string) {
+	// Parse request body
+	var request UpdateIdentityFileRequest
+	if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Check size limit (16KB)
+	const maxSize = 16 * 1024
+	if len(request.Content) > maxSize {
+		http.Error(w, fmt.Sprintf("Content exceeds maximum size of %d bytes", maxSize), http.StatusBadRequest)
+		return
+	}
+
+	// Save to database
+	identityFileStore := store.NewIdentityFileStore(r.db)
+	file := &models.AgentIdentityFile{
+		AgentID:  agentID,
+		Filename: filename,
+		Content:  request.Content,
+	}
+
+	if err := identityFileStore.CreateOrUpdate(file); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// If agent is running, sync to container
+	agent, err := r.agentStore.GetByID(agentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if agent.Status == "running" && agent.ContainerID != "" {
+		ctx := req.Context()
+		if err := r.dockerMgr.WriteWorkspaceFile(ctx, agentID, filename, []byte(request.Content)); err != nil {
+			// Log error but don't fail - DB is source of truth
+			log.Printf("Warning: Failed to sync %s to container: %v", filename, err)
+		}
+	}
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"filename":  filename,
+		"charCount": utf8.RuneCountInString(request.Content),
+	})
 }

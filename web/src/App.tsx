@@ -6,6 +6,7 @@ import { CopilotActions } from './copilot/CopilotActions'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
 import AgentDetail from './pages/AgentDetail'
+import IdentityFileEditor from './pages/IdentityFileEditor'
 import MessageViewer from './pages/MessageViewer'
 import ChannelView from './pages/ChannelView'
 import Models from './pages/Models'
@@ -80,6 +81,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/agents/:id" element={<AgentDetail />} />
+              <Route path="/agents/:agentId/identity" element={<IdentityFileEditor />} />
               <Route path="/models" element={<Models />} />
               <Route path="/auth-configs" element={<AuthConfigs />} />
               <Route path="/test-chat" element={<TestChat />} />

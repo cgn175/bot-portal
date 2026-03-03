@@ -131,3 +131,13 @@ type Artifact struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
 }
+
+// AgentIdentityFile represents an editable identity file for an agent
+type AgentIdentityFile struct {
+	ID         int64     `json:"id"`
+	AgentID    string    `json:"agentId"`
+	Filename   string    `json:"filename"`
+	Content    string    `json:"content"`
+	CharCount  int       `json:"charCount"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
