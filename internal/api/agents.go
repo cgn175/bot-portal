@@ -268,6 +268,15 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 		needsNewContainer = true
 	}
 
+	if mID, ok := updates["modelId"].(string); ok {
+		agent.ModelID = mID
+		needsNewContainer = true
+	}
+	if aID, ok := updates["authConfigId"].(string); ok {
+		agent.AuthConfigID = aID
+		needsNewContainer = true
+	}
+
 	// Remove stale container so startAgent creates a fresh one
 	if needsNewContainer && agent.ContainerID != "" {
 		ctx := req.Context()
@@ -278,14 +287,6 @@ func (r *Router) updateAgent(w http.ResponseWriter, req *http.Request, agentID s
 	}
 	if at, ok := updates["agentType"].(string); ok {
 		agent.AgentType = at
-	}
-	if mID, ok := updates["modelId"].(string); ok {
-		agent.ModelID = mID
-		needsNewContainer = true
-	}
-	if aID, ok := updates["authConfigId"].(string); ok {
-		agent.AuthConfigID = aID
-		needsNewContainer = true
 	}
 
 	if err := r.agentStore.Update(agent); err != nil {
