@@ -12,7 +12,7 @@ interface CopilotProviderProps {
  * Connects to Node.js sidecar (port 3001) which bridges to Go backend.
  */
 export function CopilotProvider({ children }: CopilotProviderProps) {
-  const runtimeUrl = '/copilotkit';
+  const runtimeUrl = 'http://localhost:3001/copilotkit';
   return (
     <CopilotKit
       runtimeUrl={runtimeUrl}
