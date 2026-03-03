@@ -29,6 +29,16 @@ type Agent struct {
 	UpdatedAt    time.Time       `json:"updatedAt"`
 }
 
+// AgentIdentityFile represents an editable identity file for an agent
+type AgentIdentityFile struct {
+	ID        int64     `json:"id"`
+	AgentID   string    `json:"agentId"`
+	Filename  string    `json:"filename"`
+	Content   string    `json:"content"`
+	CharCount int       `json:"charCount"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 // AgentStore handles agent persistence
 type AgentStore struct {
 	db *sql.DB
@@ -179,4 +189,28 @@ func (s *AgentStore) GenerateBearerToken(id string) (string, error) {
 	token := hex.EncodeToString(b)
 	_, err := s.db.Exec("UPDATE agents SET bearer_token = ?, updated_at = ? WHERE id = ?", token, time.Now(), id)
 	return token, err
+}
+
+// GetIdentityFiles retrieves all identity files for an agent
+func (s *AgentStore) GetIdentityFiles(agentID string) ([]*AgentIdentityFile, error) {
+	rows, err := s.db.Query(`
+		SELECT id, agent_id, filename, content, char_count, updated_at
+		FROM agent_identity_files WHERE agent_id = ? ORDER BY filename`,
+		agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []*AgentIdentityFile
+	for rows.Next() {
+		var file AgentIdentityFile
+		err := rows.Scan(&file.ID, &file.AgentID, &file.Filename, &file.Content, &file.CharCount, &file.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, &file)
+	}
+
+	return files, nil
 }

@@ -327,6 +327,13 @@ export default function AgentDetail() {
           >
             {pinging ? '⏳ Testing...' : '🔗 Test Connection'}
           </button>
+          <Link
+            to={`/agents/${id}/identity`}
+            className="btn btn-secondary"
+            style={{ textDecoration: 'none', justifyContent: 'flex-start' }}
+          >
+            📝 Edit Identity Files
+          </Link>
         </div>
       </div>
 

@@ -80,6 +80,17 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_channel_id ON task_logs(channel_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_sender_id ON task_logs(sender_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at)`,
+		`CREATE TABLE IF NOT EXISTS agent_identity_files (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id TEXT NOT NULL,
+			filename TEXT NOT NULL,
+			content TEXT NOT NULL DEFAULT '',
+			char_count INTEGER DEFAULT 0,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(agent_id, filename),
+			FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_identity_files_agent_id ON agent_identity_files(agent_id)`,
 	}
 
 	for _, migration := range migrations {

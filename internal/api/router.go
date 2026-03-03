@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,9 +63,11 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	channelStore.EnsureGeneralChannel()
 
 	// Ensure Docker network exists
-	ctx := context.Background()
-	if err := dockerMgr.EnsureNetwork(ctx); err != nil {
-		log.Printf("Warning: Failed to ensure Docker network: %v", err)
+	if dockerMgr != nil {
+		ctx := context.Background()
+		if err := dockerMgr.EnsureNetwork(ctx); err != nil {
+			log.Printf("Warning: Failed to ensure Docker network: %v", err)
+		}
 	}
 
 	return router
@@ -84,6 +87,18 @@ func (r *Router) Run(addr string) error {
 	mux.HandleFunc("/api/agents", r.handleAgents)
 	mux.HandleFunc("/api/agents/", r.handleAgentDetail)
 	mux.HandleFunc("/api/agents-stream", r.streamAgents)
+
+	// Identity file endpoints
+	mux.HandleFunc("/api/agents/", func(w http.ResponseWriter, req *http.Request) {
+		// Check if this is an identity-files request
+		if strings.Contains(req.URL.Path, "/identity-files/") {
+			r.handleAgentIdentityFileDetail(w, req)
+		} else if strings.HasSuffix(req.URL.Path, "/identity-files") {
+			r.handleAgentIdentityFiles(w, req)
+		} else {
+			r.handleAgentDetail(w, req)
+		}
+	})
 
 	// Channel management
 	mux.HandleFunc("/api/channels", r.handleChannels)
