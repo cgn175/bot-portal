@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { CopilotKit } from '@copilotkit/react-core';
 import '@copilotkit/react-ui/styles.css';
-import { api } from '../api/client';
 
 interface CopilotProviderProps {
   children: React.ReactNode;
@@ -13,7 +12,7 @@ interface CopilotProviderProps {
  * Connects to Node.js sidecar (port 3001) which bridges to Go backend.
  */
 export function CopilotProvider({ children }: CopilotProviderProps) {
-  const runtimeUrl = import.meta.env.VITE_COPILOT_RUNTIME_URL || 'http://localhost:3001/copilotkit';
+  const runtimeUrl = '/copilotkit';
   return (
     <CopilotKit
       runtimeUrl={runtimeUrl}
