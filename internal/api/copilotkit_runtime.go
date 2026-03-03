@@ -14,9 +14,9 @@ import (
 	"github.com/zeroclaw/bot-portal/internal/provider"
 )
 
-// CopilotChatRequest represents a CopilotKit chat completion request.
+// CopilotKitChatRequest represents a CopilotKit chat completion request.
 // It is a superset of the OpenAI chat completion format with tools support.
-type CopilotChatRequest struct {
+type CopilotKitChatRequest struct {
 	Model      string          `json:"model,omitempty"`
 	Messages   []ChatMessage   `json:"messages"`
 	Stream     bool            `json:"stream,omitempty"`
@@ -24,18 +24,18 @@ type CopilotChatRequest struct {
 	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
 }
 
-// handleCopilotChat handles POST /api/copilotkit/chat/completions
+// handleCopilotKitChat handles POST /api/copilotkit/chat/completions
 // It implements the CopilotKit self-hosted runtime protocol:
 // 1. Resolves the model (requested or default)
 // 2. Injects system prompt with Bot Portal context
 // 3. Proxies the request to the upstream LLM provider with SSE streaming
-func (r *Router) handleCopilotChat(w http.ResponseWriter, req *http.Request) {
+func (r *Router) handleCopilotKitChat(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var copilotReq CopilotChatRequest
+	var copilotReq CopilotKitChatRequest
 	if err := json.NewDecoder(req.Body).Decode(&copilotReq); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -144,8 +144,8 @@ func (r *Router) handleCopilotChat(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// handleCopilotInfo handles GET /api/copilot/info — returns available models and features
-func (r *Router) handleCopilotInfo(w http.ResponseWriter, req *http.Request) {
+// handleCopilotKitInfo handles GET /api/copilot/info — returns available models and features
+func (r *Router) handleCopilotKitInfo(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -317,7 +317,7 @@ Current state:
 
 You can help users:
 - List, create, start, stop, restart, and delete agents
-- List, create, and delete models  
+- List, create, and delete models
 - List, create, and delete auth configurations
 - Navigate to different pages (Agents, Models, Auth, Chat, Messages)
 
