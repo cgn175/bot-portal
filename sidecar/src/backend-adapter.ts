@@ -29,12 +29,13 @@ export class BackendChatAdapter {
    * Returns async generator that yields SSE chunks.
    */
   async *streamChatCompletion(request: ChatRequest): AsyncGenerator<string> {
-    const url = `${this.backendUrl}/api/copilotkit/chat/completions`;
+    const url = `${this.backendUrl}/api/chat/completions`;
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Inject-System-Prompt': 'true',
       },
       body: JSON.stringify({
         ...request,

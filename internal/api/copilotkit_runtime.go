@@ -1,148 +1,15 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/models"
-	"github.com/zeroclaw/bot-portal/internal/provider"
 )
-
-// CopilotKitChatRequest represents a CopilotKit chat completion request.
-// It is a superset of the OpenAI chat completion format with tools support.
-type CopilotKitChatRequest struct {
-	Model      string          `json:"model,omitempty"`
-	Messages   []ChatMessage   `json:"messages"`
-	Stream     bool            `json:"stream,omitempty"`
-	Tools      json.RawMessage `json:"tools,omitempty"`
-	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
-}
-
-// handleCopilotKitChat handles POST /api/copilotkit/chat/completions
-// It implements the CopilotKit self-hosted runtime protocol:
-// 1. Resolves the model (requested or default)
-// 2. Injects system prompt with Bot Portal context
-// 3. Proxies the request to the upstream LLM provider with SSE streaming
-func (r *Router) handleCopilotKitChat(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var copilotReq CopilotKitChatRequest
-	if err := json.NewDecoder(req.Body).Decode(&copilotReq); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// 1. Resolve model: use requested model or fall back to default
-	model, err := r.resolveModelForCopilot(copilotReq.Model)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// 2. Resolve auth config for the model's provider
-	token, baseURL, copilotAuth, err := r.resolveAuthForModel(model)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// 3. Inject system prompt if not already present
-	messages := r.injectSystemPrompt(copilotReq.Messages)
-
-	// 4. Build upstream request payload
-	payload := map[string]interface{}{
-		"model":    model.ModelIdentifier,
-		"messages": messages,
-		"stream":   true,
-	}
-	if len(copilotReq.Tools) > 0 {
-		payload["tools"] = json.RawMessage(copilotReq.Tools)
-	}
-	if len(copilotReq.ToolChoice) > 0 {
-		payload["tool_choice"] = json.RawMessage(copilotReq.ToolChoice)
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
-		return
-	}
-
-	endpointURL := strings.TrimRight(baseURL, "/") + "/chat/completions"
-
-	proxyReq, err := http.NewRequest(http.MethodPost, endpointURL, bytes.NewReader(payloadBytes))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create request: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Set auth and content headers
-	authHeaderName, authHeaderValue := provider.GetAuthHeader(model.Provider, token)
-	proxyReq.Header.Set(authHeaderName, authHeaderValue)
-	proxyReq.Header.Set("Content-Type", "application/json")
-	proxyReq.Header.Set("Accept", "text/event-stream")
-	applyProviderHeaders(proxyReq, model.Provider, baseURL)
-
-	// 5. Make the request and stream the response
-	client := &http.Client{Timeout: 300 * time.Second} // Longer timeout for streaming
-	resp, err := client.Do(proxyReq)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to connect to model provider: %v", err), http.StatusBadGateway)
-		return
-	}
-
-	// On 401/403 for Copilot, refresh token and retry once
-	if copilotAuth != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-		resp.Body.Close()
-		var creds map[string]string
-		if err := json.Unmarshal([]byte(copilotAuth.Credentials), &creds); err == nil {
-			if newToken, err := r.refreshCopilotToken(copilotAuth, creds["access_token"]); err == nil {
-				retryReq, _ := http.NewRequest(http.MethodPost, endpointURL, bytes.NewReader(payloadBytes))
-				h, v := provider.GetAuthHeader(model.Provider, newToken)
-				retryReq.Header.Set(h, v)
-				retryReq.Header.Set("Content-Type", "application/json")
-				retryReq.Header.Set("Accept", "text/event-stream")
-				applyProviderHeaders(retryReq, model.Provider, baseURL)
-
-				if retryResp, err := client.Do(retryReq); err == nil {
-					resp = retryResp
-				}
-			}
-		}
-	}
-
-	// Stream the response back to the client
-	if resp.StatusCode == http.StatusOK {
-		if err := r.streamChatResponse(w, resp); err != nil {
-			log.Printf("Copilot streaming error: %v", err)
-		}
-		return
-	}
-
-	// Non-OK response — forward the error
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	buf := make([]byte, 4096)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			w.Write(buf[:n])
-		}
-		if err != nil {
-			break
-		}
-	}
-}
 
 // handleCopilotKitInfo handles GET /api/copilot/info — returns available models and features
 func (r *Router) handleCopilotKitInfo(w http.ResponseWriter, req *http.Request) {
@@ -176,9 +43,9 @@ func (r *Router) handleCopilotKitInfo(w http.ResponseWriter, req *http.Request) 
 // Model Resolution
 // ============================================================================
 
-// resolveModelForCopilot resolves the model to use for a CopilotKit request.
+// resolveModel resolves the model to use for a chat request.
 // Fallback chain: requested model → settings.DefaultModel → COPILOT_DEFAULT_MODEL_ID env → is_default flag → first model → error
-func (r *Router) resolveModelForCopilot(requestedModel string) (*models.Model, error) {
+func (r *Router) resolveModel(requestedModel string) (*models.Model, error) {
 	// Step 1: If a model ID was explicitly requested, look it up
 	if requestedModel != "" {
 		model, err := r.modelStore.GetByID(requestedModel)

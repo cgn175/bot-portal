@@ -14,14 +14,27 @@ import (
 	"github.com/zeroclaw/bot-portal/internal/provider"
 )
 
+// chatProxyOptions holds parameters for proxying a chat completion request upstream.
+type chatProxyOptions struct {
+	model       *models.Model
+	messages    []ChatMessage
+	stream      bool
+	tools       json.RawMessage
+	toolChoice  json.RawMessage
+	maxTokens   int
+	temperature *float64
+}
+
 // ChatRequest represents a chat completion request
 type ChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Temperature *float64      `json:"temperature,omitempty"`
-	TopP        *float64      `json:"top_p,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
+	Model       string          `json:"model,omitempty"`
+	Messages    []ChatMessage   `json:"messages"`
+	MaxTokens   int             `json:"max_tokens,omitempty"`
+	Temperature *float64        `json:"temperature,omitempty"`
+	TopP        *float64        `json:"top_p,omitempty"`
+	Stream      bool            `json:"stream,omitempty"`
+	Tools       json.RawMessage `json:"tools,omitempty"`
+	ToolChoice  json.RawMessage `json:"tool_choice,omitempty"`
 }
 
 // ChatMessage represents a single message in the conversation.
@@ -77,14 +90,10 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	// Get model details
-	model, err := r.modelStore.GetByID(chatReq.Model)
+	// Resolve model (with fallback chain)
+	model, err := r.resolveModel(chatReq.Model)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get model: %v", err), http.StatusInternalServerError)
-		return
-	}
-	if model == nil {
-		http.Error(w, "Model not found", http.StatusNotFound)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -109,60 +118,50 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 
 	log.Printf("[Adaptive Chat] Using OpenAI format for model: %s", model.ModelIdentifier)
 
-	// Find auth config for this model's provider
-	authConfigs, err := r.authConfigStore.List()
+	// Inject system prompt if requested
+	messages := chatReq.Messages
+	if req.Header.Get("X-Inject-System-Prompt") == "true" {
+		messages = r.injectSystemPrompt(messages)
+	}
+
+	r.proxyChatCompletion(w, chatProxyOptions{
+		model:       model,
+		messages:    messages,
+		stream:      chatReq.Stream,
+		tools:       chatReq.Tools,
+		toolChoice:  chatReq.ToolChoice,
+		maxTokens:   chatReq.MaxTokens,
+		temperature: chatReq.Temperature,
+	})
+}
+
+// proxyChatCompletion handles the common proxy logic for sending a chat completion
+// request to an upstream LLM provider. It resolves auth, builds the payload,
+// makes the request (with Copilot token refresh retry), and writes the response.
+func (r *Router) proxyChatCompletion(w http.ResponseWriter, opts chatProxyOptions) {
+	token, baseURL, copilotAuth, err := r.resolveAuthForModel(opts.model)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get auth configs: %v", err), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var token, baseURL string
-	var copilotAuth *models.AuthConfig // tracked for 401/403 retry
-	for _, auth := range authConfigs {
-		if auth.Provider == model.Provider || (model.Provider == "copilot" && auth.AuthType == "github_copilot_oauth") {
-			baseURL = auth.EndpointURL
-
-			if auth.AuthType == "github_copilot_oauth" {
-				copilotAuth = auth
-				var refreshErr error
-				token, refreshErr = r.ensureFreshCopilotToken(auth)
-				if refreshErr != nil {
-					// Fall back to stored values
-					var creds map[string]string
-					if err := json.Unmarshal([]byte(auth.Credentials), &creds); err == nil {
-						token = creds["copilot_api_key"]
-						if token == "" {
-							token = creds["access_token"]
-						}
-					}
-				}
-				if baseURL == "" {
-					baseURL = "https://api.githubcopilot.com"
-				}
-			} else {
-				var creds map[string]string
-				if err := json.Unmarshal([]byte(auth.Credentials), &creds); err != nil {
-					continue
-				}
-				token = creds["api_key"]
-				baseURL = strings.TrimRight(auth.EndpointURL, "/")
-			}
-			break
-		}
-	}
-
-	if token == "" {
-		http.Error(w, "No auth config found for model provider", http.StatusBadRequest)
-		return
-	}
-
-	// Build the request to the model endpoint
-	endpointURL := baseURL + "/chat/completions"
-
-	// Create request payload
+	// Build upstream request payload
 	payload := map[string]interface{}{
-		"model":    model.ModelIdentifier,
-		"messages": chatReq.Messages,
+		"model":    opts.model.ModelIdentifier,
+		"messages": opts.messages,
+		"stream":   opts.stream,
+	}
+	if len(opts.tools) > 0 {
+		payload["tools"] = json.RawMessage(opts.tools)
+	}
+	if len(opts.toolChoice) > 0 {
+		payload["tool_choice"] = json.RawMessage(opts.toolChoice)
+	}
+	if opts.maxTokens > 0 {
+		payload["max_tokens"] = opts.maxTokens
+	}
+	if opts.temperature != nil {
+		payload["temperature"] = *opts.temperature
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -171,58 +170,85 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
+	endpointURL := strings.TrimRight(baseURL, "/") + "/chat/completions"
+
+	acceptHeader := "application/json"
+	timeout := 120 * time.Second
+	if opts.stream {
+		acceptHeader = "text/event-stream"
+		timeout = 300 * time.Second
+	}
+
 	proxyReq, err := http.NewRequest(http.MethodPost, endpointURL, bytes.NewReader(payloadBytes))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create request: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Set auth header using provider registry (respects x-api-key, Bearer, custom styles)
-	authHeaderName, authHeaderValue := provider.GetAuthHeader(model.Provider, token)
+	authHeaderName, authHeaderValue := provider.GetAuthHeader(opts.model.Provider, token)
 	proxyReq.Header.Set(authHeaderName, authHeaderValue)
 	proxyReq.Header.Set("Content-Type", "application/json")
-	proxyReq.Header.Set("Accept", "application/json")
+	proxyReq.Header.Set("Accept", acceptHeader)
+	applyProviderHeaders(proxyReq, opts.model.Provider, baseURL)
 
-	// Apply provider-specific headers from registry
-	applyProviderHeaders(proxyReq, model.Provider, baseURL)
-
-	// Make the request
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(proxyReq)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to make request: %v", err), http.StatusBadGateway)
-		return
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to connect to model provider: %v", err), http.StatusBadGateway)
 		return
 	}
 
 	// On 401/403 for Copilot, refresh the token and retry once
 	if copilotAuth != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+		resp.Body.Close()
 		var creds map[string]string
 		if err := json.Unmarshal([]byte(copilotAuth.Credentials), &creds); err == nil {
 			if newToken, err := r.refreshCopilotToken(copilotAuth, creds["access_token"]); err == nil {
 				retryReq, _ := http.NewRequest(http.MethodPost, endpointURL, bytes.NewReader(payloadBytes))
-				h, v := provider.GetAuthHeader(model.Provider, newToken)
+				h, v := provider.GetAuthHeader(opts.model.Provider, newToken)
 				retryReq.Header.Set(h, v)
 				retryReq.Header.Set("Content-Type", "application/json")
-				retryReq.Header.Set("Accept", "application/json")
-				applyProviderHeaders(retryReq, model.Provider, baseURL)
+				retryReq.Header.Set("Accept", acceptHeader)
+				applyProviderHeaders(retryReq, opts.model.Provider, baseURL)
 
 				if retryResp, err := client.Do(retryReq); err == nil {
-					retryBody, readErr := io.ReadAll(retryResp.Body)
-					retryResp.Body.Close()
-					if readErr == nil {
-						body = retryBody
-						resp = retryResp
-					}
+					resp = retryResp
 				}
 			}
 		}
+	}
+
+	// Stream or return full response
+	if opts.stream {
+		if resp.StatusCode == http.StatusOK {
+			if err := r.streamChatResponse(w, resp); err != nil {
+				log.Printf("Streaming error: %v", err)
+			}
+			return
+		}
+		// Non-OK streaming response — forward the error body
+		defer resp.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				w.Write(buf[:n])
+			}
+			if readErr != nil {
+				break
+			}
+		}
+		return
+	}
+
+	// Non-streaming: read full body and forward
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		http.Error(w, "Failed to read response", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
