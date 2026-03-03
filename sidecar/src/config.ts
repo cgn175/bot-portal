@@ -11,5 +11,5 @@ export const config = {
 
   // Default model to use if not specified by CopilotKit
   // This should be a model ID from your Bot Portal database
-  defaultModel: process.env.DEFAULT_MODEL || 'gpt-4o',
+  defaultModel: process.env.DEFAULT_MODEL || 'gpt-5-mini',
 };
