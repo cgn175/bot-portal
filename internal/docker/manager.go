@@ -258,8 +258,8 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 	return envVars
 }
 
-var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "{{ .ZEROCLAW_WORK_DIR }}/workspace"
-config_path = "{{ .ZEROCLAW_WORK_DIR }}/.zeroclaw/config.toml"
+var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "{{ .ZeroClawWorkDir }}/workspace"
+config_path = "{{ .ZeroClawWorkDir }}/.zeroclaw/config.toml"
 {{ if .DefaultProvider }}default_provider = "{{ .DefaultProvider }}"
 {{ end }}{{ if .DefaultModel }}default_model = "{{ .DefaultModel }}"
 {{ end }}{{ if .ApiURL }}api_url = "{{ .ApiURL }}"
