@@ -148,6 +148,9 @@ func (r *Router) updateModel(w http.ResponseWriter, req *http.Request, modelID s
 	if baseURL, ok := updates["baseUrl"].(string); ok {
 		model.EndpointURL = baseURL
 	}
+	if isDefault, ok := updates["isDefault"].(bool); ok {
+		model.IsDefault = isDefault
+	}
 	if apiKeyConfig, ok := updates["apiKeyConfig"].(map[string]interface{}); ok {
 		configBytes, err := json.Marshal(apiKeyConfig)
 		if err != nil {
@@ -168,6 +171,19 @@ func (r *Router) updateModel(w http.ResponseWriter, req *http.Request, modelID s
 		return
 	}
 
+	if isDefault, ok := updates["isDefault"].(bool); ok {
+		if isDefault == true {
+			if err := r.modelStore.SetDefault(modelID); err != nil {
+				if err == store.ErrNotFound {
+					http.Error(w, "Model not found", http.StatusNotFound)
+					return
+				}
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(model)
 }
@@ -183,45 +199,4 @@ func (r *Router) deleteModel(w http.ResponseWriter, req *http.Request, modelID s
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// handleModelDefault handles PUT /api/models/default to set the default model
-func (r *Router) handleModelDefault(w http.ResponseWriter, req *http.Request) {
-	switch req.Method {
-	case http.MethodPut:
-		var body struct {
-			ModelID string `json:"modelId"`
-		}
-		if err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.ModelID == "" {
-			http.Error(w, "modelId is required", http.StatusBadRequest)
-			return
-		}
-		if err := r.modelStore.SetDefault(body.ModelID); err != nil {
-			if err == store.ErrNotFound {
-				http.Error(w, "Model not found", http.StatusNotFound)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		model, _ := r.modelStore.GetByID(body.ModelID)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(model)
-
-	case http.MethodGet:
-		model, err := r.modelStore.GetDefault()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if model == nil {
-			http.Error(w, "No models configured", http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(model)
-
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
 }

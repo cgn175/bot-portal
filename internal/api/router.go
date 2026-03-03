@@ -117,10 +117,6 @@ func (r *Router) Run(addr string) error {
 	// CopilotKit self-hosted runtime endpoints
 	mux.HandleFunc("/api/copilotkit/chat/completions", r.handleChatCompletions)
 	mux.HandleFunc("/api/copilotkit/info", r.handleCopilotKitInfo)
-	mux.HandleFunc("/api/copilotkit/settings", r.handleCopilotKitSettings)
-
-	// Model default management
-	mux.HandleFunc("/api/models/default", r.handleModelDefault)
 
 	// Provider registry
 	mux.HandleFunc("/api/providers", r.handleProviders)

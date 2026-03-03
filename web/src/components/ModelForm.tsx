@@ -21,13 +21,12 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
     provider: '',
     modelName: '',
     baseUrl: '',
-    apiKeyConfig: {}
+    apiKeyConfig: {},
+    isDefault: false,
   })
   const [defaultParams, setDefaultParams] = useState(DEFAULT_PARAMS_EXAMPLE)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  // Auth config integration
   const [authConfigs, setAuthConfigs] = useState<AuthConfig[]>([])
   const [selectedAuthConfig, setSelectedAuthConfig] = useState('')
   const [availableModels, setAvailableModels] = useState<CopilotModel[]>([])
@@ -35,9 +34,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
 
   useEffect(() => {
     api.listAuthConfigs().then(setAuthConfigs).catch(() => {})
-  }, [])
-
-  useEffect(() => {
+    
     if (model) {
       setFormData({
         id: model.id,
@@ -45,8 +42,10 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
         provider: model.provider,
         modelName: model.modelIdentifier,
         baseUrl: model.endpointUrl || '',
-        apiKeyConfig: {}
+        apiKeyConfig: {},
+        isDefault: model.isDefault || false,
       })
+
       if (model.defaultParams) {
         try {
           const parsed = JSON.parse(model.defaultParams)
@@ -67,15 +66,12 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
     if (!config) return
 
     const provider = config.authType === 'github_copilot_oauth' ? 'copilot' : config.provider
-    setFormData(prev => ({
-      ...prev,
-      provider,
-      baseUrl: config.endpointUrl || ''
-    }))
+    setFormData(prev => ({ ...prev, provider, baseUrl: config.endpointUrl || '' }))
   }
 
   const handleBrowseModels = async () => {
     if (!selectedAuthConfig) return
+    
     setBrowsing(true)
     try {
       const discovered = await api.discoverModels(selectedAuthConfig)
@@ -103,7 +99,6 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
     setLoading(true)
 
     try {
-      // Parse and validate default params JSON
       let parsedParams: Record<string, unknown> | undefined
       if (defaultParams.trim()) {
         try {
@@ -115,10 +110,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
         }
       }
 
-      const submitData: CreateModelRequest = {
-        ...formData,
-        apiKeyConfig: parsedParams
-      }
+      const submitData: CreateModelRequest = { ...formData, apiKeyConfig: parsedParams }
 
       if (model) {
         await api.updateModel(model.id, submitData)
@@ -136,52 +128,26 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
 
   const footer = (
     <>
-      <button
-        type="button"
-        className="btn btn-secondary"
-        onClick={onCancel}
-        disabled={loading}
-      >
+      <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
         Cancel
       </button>
-      <button
-        type="submit"
-        className="btn btn-primary"
-        disabled={loading}
-        form="model-form"
-      >
+      <button type="submit" className="btn btn-primary" disabled={loading} form="model-form">
         {loading ? (model ? 'Updating...' : 'Creating...') : (model ? 'Update Model' : 'Create Model')}
       </button>
     </>
   )
 
   return (
-    <Modal
-      isOpen={true}
-      onClose={onCancel}
-      title={model ? 'Edit Model' : 'Add New Model'}
-      footer={footer}
-      size="lg"
-    >
-      {error && (
-        <Alert type="error" onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
+    <Modal isOpen={true} onClose={onCancel} title={model ? 'Edit Model' : 'Add New Model'} footer={footer} size="lg">
+      {error && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
 
       <form id="model-form" onSubmit={handleSubmit}>
         {!model && authConfigs.length > 0 && (
           <div className="form-group">
             <label htmlFor="authConfig">Auth Provider</label>
-            <select
-              id="authConfig"
-              value={selectedAuthConfig}
-              onChange={e => handleAuthConfigChange(e.target.value)}
-            >
+            <select id="authConfig" value={selectedAuthConfig} onChange={e => handleAuthConfigChange(e.target.value)}>
               <option value="">— Select to auto-fill —</option>
-              {authConfigs.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
+              {authConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <small>Select a provider to auto-fill endpoint and discover models</small>
           </div>
@@ -200,13 +166,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
               style={{ flex: 1 }}
             />
             {selectedAuthConfig && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleBrowseModels}
-                disabled={browsing}
-                style={{ whiteSpace: 'nowrap' }}
-              >
+              <button type="button" className="btn btn-secondary" onClick={handleBrowseModels} disabled={browsing} style={{ whiteSpace: 'nowrap' }}>
                 {browsing ? 'Loading...' : 'Browse'}
               </button>
             )}
@@ -241,9 +201,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
                   onMouseLeave={e => { if (formData.modelName !== m.id) e.currentTarget.style.background = 'none' }}
                 >
                   <code style={{ fontSize: '0.8rem' }}>{m.id}</code>
-                  {m.name && m.name !== m.id && (
-                    <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>— {m.name}</span>
-                  )}
+                  {m.name && m.name !== m.id && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>— {m.name}</span>}
                 </button>
               ))}
             </div>
@@ -262,9 +220,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
             placeholder="gpt-4o"
             disabled={!!model}
           />
-          <small>
-            {model ? 'Model ID cannot be changed' : 'Unique identifier (lowercase, no spaces)'}
-          </small>
+          <small>{model ? 'Model ID cannot be changed' : 'Unique identifier (lowercase, no spaces)'}</small>
         </div>
 
         <div className="form-group">
@@ -321,16 +277,14 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
         <div className="form-group">
           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
             <input
-              name="isDefault"
               type="checkbox"
-              checked={model.isDefault}
+              checked={formData.isDefault}
+              onChange={e => setFormData({ ...formData, isDefault: e.target.checked })}
               style={{ marginRight: '0.5rem', width: 'auto' }}
             />
             <span>Set as default model for CopilotKit</span>
           </label>
-          <small>
-            Use this model by default in the CopilotKit chat assistant
-          </small>
+          <small>Use this model by default in the CopilotKit chat assistant</small>
         </div>
       </form>
     </Modal>

@@ -14,19 +14,6 @@ interface CopilotProviderProps {
  */
 export function CopilotProvider({ children }: CopilotProviderProps) {
   const runtimeUrl = import.meta.env.VITE_COPILOT_RUNTIME_URL || 'http://localhost:3001/copilotkit';
-  const [defaultModel, setDefaultModel] = useState<string | undefined>();
-
-  useEffect(() => {
-    // Fetch default model from backend on mount
-    api.getCopilotKitSettings()
-      .then(settings => {
-        if (settings.defaultModel) {
-          setDefaultModel(settings.defaultModel);
-        }
-      })
-      .catch(err => console.error('Failed to load CopilotKit settings:', err));
-  }, []);
-
   return (
     <CopilotKit
       runtimeUrl={runtimeUrl}

@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -46,42 +45,6 @@ func (r *Router) handleCopilotKitInfo(w http.ResponseWriter, req *http.Request) 
 // resolveModel resolves the model to use for a chat request.
 // Fallback chain: requested model → settings.DefaultModel → COPILOT_DEFAULT_MODEL_ID env → is_default flag → first model → error
 func (r *Router) resolveModel(requestedModel string) (*models.Model, error) {
-	// Step 1: If a model ID was explicitly requested, look it up
-	if requestedModel != "" {
-		model, err := r.modelStore.GetByID(requestedModel)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get model: %v", err)
-		}
-		if model != nil {
-			return model, nil
-		}
-		// Model ID not found — fall through to defaults
-		log.Printf("Requested model %q not found, trying defaults", requestedModel)
-	}
-
-	// Step 2: Check CopilotKit settings (from /api/copilotkit/settings)
-	copilotKitSettings.RLock()
-	settingsModel := copilotKitSettings.DefaultModel
-	copilotKitSettings.RUnlock()
-
-	if settingsModel != "" {
-		model, err := r.modelStore.GetByID(settingsModel)
-		if err == nil && model != nil {
-			return model, nil
-		}
-		log.Printf("CopilotKit settings model %q not found, trying env", settingsModel)
-	}
-
-	// Step 3: Check COPILOT_DEFAULT_MODEL_ID env var
-	if envModelID := os.Getenv("COPILOT_DEFAULT_MODEL_ID"); envModelID != "" {
-		model, err := r.modelStore.GetByID(envModelID)
-		if err == nil && model != nil {
-			return model, nil
-		}
-		log.Printf("COPILOT_DEFAULT_MODEL_ID=%q not found in database", envModelID)
-	}
-
-	// Step 3 + 4: Use GetDefault (is_default flag → first model)
 	model, err := r.modelStore.GetDefault()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get default model: %v", err)
