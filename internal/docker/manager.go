@@ -23,6 +23,8 @@ type Manager struct {
 	cli *client.Client
 }
 
+const ZEROCLAW_WORK_DIR = "zeroclaw-data"
+
 // NewManager creates a new Docker manager.
 // It resolves the active Docker context (e.g., Docker Desktop vs Podman) to
 // connect to the correct daemon, matching the behavior of the Docker CLI.
@@ -256,8 +258,8 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 	return envVars
 }
 
-var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "/zeroclaw-data/workspace"
-config_path = "/zeroclaw-data/.zeroclaw/config.toml"
+var agentConfigTmpl = template.Must(template.New("config").Parse(`workspace_dir = "{{ .ZEROCLAW_WORK_DIR }}/workspace"
+config_path = "{{ .ZEROCLAW_WORK_DIR }}/.zeroclaw/config.toml"
 {{ if .DefaultProvider }}default_provider = "{{ .DefaultProvider }}"
 {{ end }}{{ if .DefaultModel }}default_model = "{{ .DefaultModel }}"
 {{ end }}{{ if .ApiURL }}api_url = "{{ .ApiURL }}"
@@ -331,6 +333,7 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		DefaultModel       string
 		ApiURL             string
 		DefaultTemperature float64
+		ZeroClawWorkDir    string
 	}{
 		GatewayPort:        gatewayPort,
 		Peers:              peers,
@@ -338,6 +341,7 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		DefaultModel:       defaultModel,
 		ApiURL:             apiURL,
 		DefaultTemperature: defaultTemperature,
+		ZeroClawWorkDir:    ZEROCLAW_WORK_DIR,
 	}
 
 	tmpDir := os.Getenv("AGENT_CONFIG_DIR")
@@ -377,7 +381,7 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 
 // CreateContainer creates a new Docker container for an agent
 func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (string, error) {
-	containerName := "bot-portal-agent-" + config.AgentID
+	containerName := m.getContainerNameByAgentId(config.AgentID)
 
 	// Try to get the image ID to avoid Docker adding prefixes
 	imageID := config.AgentImage
@@ -470,13 +474,13 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 			{
 				Type:     mount.TypeBind,
 				Source:   absConfigPath,
-				Target:   "/zeroclaw-data/.zeroclaw/config.toml",
+				Target:   ZEROCLAW_WORK_DIR + "/.zeroclaw/config.toml",
 				ReadOnly: false,
 			},
 			{
 				Type:   mount.TypeVolume,
 				Source: fmt.Sprintf("bot-portal-agent-%s-workspace", config.AgentID),
-				Target: "/zeroclaw-data/workspace",
+				Target: ZEROCLAW_WORK_DIR + "/workspace",
 			},
 		},
 	}

@@ -58,14 +58,14 @@ func (m *Manager) ReadWorkspaceFile(ctx context.Context, agentID string, filenam
 	}
 
 	// Find the container for this agent
-	containerName := fmt.Sprintf("agent-%s", agentID)
+	containerName := m.getContainerNameByAgentId(agentID)
 	cont, err := m.getContainerByName(ctx, containerName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find container for agent %s: %w", agentID, err)
 	}
 
 	// Read the file using Docker CopyFromContainer API
-	workspacePath := fmt.Sprintf("/workspace/%s", filename)
+	workspacePath := fmt.Sprintf("%s/workspace/%s", ZEROCLAW_WORK_DIR, filename)
 	reader, _, err := m.cli.CopyFromContainer(ctx, cont.ID, workspacePath)
 	if err != nil {
 		// File doesn't exist in container
@@ -107,7 +107,7 @@ func (m *Manager) WriteWorkspaceFile(ctx context.Context, agentID string, filena
 	}
 
 	// Find the container for this agent
-	containerName := fmt.Sprintf("agent-%s", agentID)
+	containerName := m.getContainerNameByAgentId(agentID)
 	cont, err := m.getContainerByName(ctx, containerName)
 	if err != nil {
 		return fmt.Errorf("failed to find container for agent %s: %w", agentID, err)
@@ -121,7 +121,7 @@ func (m *Manager) WriteWorkspaceFile(ctx context.Context, agentID string, filena
 	}
 
 	// Use docker cp API to copy file into container
-	err = m.cli.CopyToContainer(ctx, cont.ID, "/workspace", tarReader, container.CopyToContainerOptions{
+	err = m.cli.CopyToContainer(ctx, cont.ID, ZEROCLAW_WORK_DIR+"/workspace", tarReader, container.CopyToContainerOptions{
 		AllowOverwriteDirWithFile: true,
 	})
 	if err != nil {
@@ -200,4 +200,8 @@ func (m *Manager) getContainerByName(ctx context.Context, name string) (*Contain
 	}
 
 	return nil, fmt.Errorf("container %s not found", name)
+}
+
+func (m *Manager) getContainerNameByAgentId(agentId string) string {
+	return fmt.Sprintf("bot-portal-agent-%s", agentId)
 }

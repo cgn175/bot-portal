@@ -87,6 +87,7 @@ func (r *Router) Run(addr string) error {
 	mux.HandleFunc("/api/agents", r.handleAgents)
 	mux.HandleFunc("/api/agents/", func(w http.ResponseWriter, req *http.Request) {
 		path := req.URL.Path
+		log.Printf("Agent router: path=%q method=%s", path, req.Method)
 		if strings.Contains(path, "/identity-files/") {
 			r.handleAgentIdentityFileDetail(w, req)
 		} else if strings.HasSuffix(path, "/identity-files") {

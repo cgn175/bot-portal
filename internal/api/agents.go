@@ -856,6 +856,8 @@ func (r *Router) handleAgentIdentityFileDetail(w http.ResponseWriter, req *http.
 	agentID := parts[0]
 	filename := parts[1]
 
+	log.Printf("Identity file request: agentID=%q filename=%q method=%s", agentID, filename, req.Method)
+
 	if agentID == "" {
 		http.Error(w, "Agent ID required", http.StatusBadRequest)
 		return
@@ -868,10 +870,12 @@ func (r *Router) handleAgentIdentityFileDetail(w http.ResponseWriter, req *http.
 	// Verify agent exists
 	agent, err := r.agentStore.GetByID(agentID)
 	if err != nil {
+		log.Printf("Identity file: error looking up agent %q: %v", agentID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if agent == nil {
+		log.Printf("Identity file: agent %q not found", agentID)
 		http.Error(w, "Agent not found", http.StatusNotFound)
 		return
 	}
