@@ -4,6 +4,8 @@ import {
   CopilotRuntimeChatCompletionResponse
 } from '@copilotkit/runtime';
 import { randomUUID } from 'crypto';
+import { createOpenAI } from '@ai-sdk/openai';
+import { LanguageModel } from 'ai';
 import { BackendChatAdapter } from './backend-adapter.js';
 import { config } from './config.js';
 
@@ -12,11 +14,26 @@ import { config } from './config.js';
  * Implements the CopilotServiceAdapter interface.
  */
 export class BackendRuntimeAdapter implements CopilotServiceAdapter {
-  provider = 'bot-portal-backend';
+  provider = 'openai';
   model?: string;
+  private languageModel: LanguageModel;
 
   constructor(private backendAdapter: BackendChatAdapter, defaultModel?: string) {
     this.model = defaultModel || config.defaultModel;
+
+    // Create an OpenAI-compatible model that routes to our Go backend
+    // instead of directly to OpenAI. The backend handles real API key resolution.
+    const backendOpenAI = createOpenAI({
+      baseURL: `${config.backendUrl}/api/copilotkit`,
+      apiKey: 'backend-managed',
+    });
+    // Use .chat() to force the Chat Completions API (/chat/completions)
+    // instead of the default Responses API (/responses)
+    this.languageModel = backendOpenAI.chat(this.model || 'gpt-4o-mini');
+  }
+
+  getLanguageModel(): LanguageModel {
+    return this.languageModel;
   }
 
   async process(request: CopilotRuntimeChatCompletionRequest): Promise<CopilotRuntimeChatCompletionResponse> {

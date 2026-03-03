@@ -103,13 +103,13 @@ func transformToClaudeFormat(openAIReq ChatRequest) ClaudeRequest {
 		if msg.Role == "system" {
 			// Use first system message only
 			if claudeReq.System == "" {
-				claudeReq.System = msg.Content
+				claudeReq.System = msg.ContentString()
 			}
 		} else {
 			// Keep user and assistant messages
 			claudeReq.Messages = append(claudeReq.Messages, ClaudeMessage{
 				Role:    msg.Role,
-				Content: msg.Content,
+				Content: msg.ContentString(),
 			})
 		}
 	}

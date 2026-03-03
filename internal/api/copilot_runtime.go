@@ -286,7 +286,8 @@ func (r *Router) injectSystemPrompt(messages []ChatMessage) []ChatMessage {
 	}
 
 	systemPrompt := r.buildSystemPrompt()
-	return append([]ChatMessage{{Role: "system", Content: systemPrompt}}, messages...)
+	contentJSON, _ := json.Marshal(systemPrompt)
+	return append([]ChatMessage{{Role: "system", Content: json.RawMessage(contentJSON)}}, messages...)
 }
 
 // buildSystemPrompt creates a dynamic system prompt describing Bot Portal.

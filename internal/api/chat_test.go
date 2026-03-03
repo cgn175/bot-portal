@@ -46,8 +46,8 @@ func TestHandleChatCompletions_ClaudeModel(t *testing.T) {
 	chatReq := ChatRequest{
 		Model: "claude-test",
 		Messages: []ChatMessage{
-			{Role: "system", Content: "You are helpful"},
-			{Role: "user", Content: "Hello"},
+			NewChatMessage("system", "You are helpful"),
+			NewChatMessage("user", "Hello"),
 		},
 		MaxTokens: 100,
 		Stream:    false,

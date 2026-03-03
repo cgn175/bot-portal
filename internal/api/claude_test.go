@@ -119,9 +119,9 @@ func TestTransformToClaudeFormat(t *testing.T) {
 			input: ChatRequest{
 				Model: "claude-3-5-sonnet-20241022",
 				Messages: []ChatMessage{
-					{Role: "system", Content: "You are a helpful assistant."},
-					{Role: "user", Content: "Hello"},
-					{Role: "assistant", Content: "Hi there!"},
+					NewChatMessage("system", "You are a helpful assistant."),
+					NewChatMessage("user", "Hello"),
+					NewChatMessage("assistant", "Hi there!"),
 				},
 				MaxTokens: 1024,
 				Stream:    false,
@@ -142,7 +142,7 @@ func TestTransformToClaudeFormat(t *testing.T) {
 			input: ChatRequest{
 				Model: "claude-3-5-sonnet-20241022",
 				Messages: []ChatMessage{
-					{Role: "user", Content: "Hello"},
+					NewChatMessage("user", "Hello"),
 				},
 				MaxTokens: 2048,
 			},
@@ -159,9 +159,9 @@ func TestTransformToClaudeFormat(t *testing.T) {
 			input: ChatRequest{
 				Model: "claude-3-5-sonnet-20241022",
 				Messages: []ChatMessage{
-					{Role: "system", Content: "First system message"},
-					{Role: "system", Content: "Second system message"},
-					{Role: "user", Content: "Hello"},
+					NewChatMessage("system", "First system message"),
+					NewChatMessage("system", "Second system message"),
+					NewChatMessage("user", "Hello"),
 				},
 				MaxTokens: 1024,
 			},

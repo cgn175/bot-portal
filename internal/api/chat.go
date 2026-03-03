@@ -24,10 +24,34 @@ type ChatRequest struct {
 	Stream      bool          `json:"stream,omitempty"`
 }
 
-// ChatMessage represents a single message in the conversation
+// ChatMessage represents a single message in the conversation.
+// Uses json.RawMessage for Content and ToolCalls to transparently proxy
+// all fields to upstream LLM providers without loss.
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string          `json:"role"`
+	Content    json.RawMessage `json:"content"`
+	ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+	Name       string          `json:"name,omitempty"`
+}
+
+// ContentString returns the content as a plain string, handling both
+// JSON string values and other types (returns empty string for non-strings).
+func (m ChatMessage) ContentString() string {
+	if len(m.Content) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(m.Content, &s); err == nil {
+		return s
+	}
+	return string(m.Content)
+}
+
+// NewChatMessage creates a ChatMessage with a string content value.
+func NewChatMessage(role, content string) ChatMessage {
+	contentJSON, _ := json.Marshal(content)
+	return ChatMessage{Role: role, Content: json.RawMessage(contentJSON)}
 }
 
 // ChatResponse represents a chat completion response

@@ -646,7 +646,7 @@ func (r *Router) handleAgentChat(w http.ResponseWriter, req *http.Request, agent
 	createReq := a2a.CreateTaskRequest{
 		Message: a2a.TaskMessage{
 			Role:      lastMsg.Role,
-			Content:   lastMsg.Content,
+			Content:   lastMsg.ContentString(),
 			Timestamp: time.Now(),
 		},
 	}
@@ -692,7 +692,7 @@ func (r *Router) handleAgentChat(w http.ResponseWriter, req *http.Request, agent
 	// Save the task locally using the agent's task ID
 	_, err = r.createTaskWithID(taskID, a2a.ChannelID("portal", agentID), "portal", agentID, a2a.TaskMessage{
 		Role:      lastMsg.Role,
-		Content:   lastMsg.Content,
+		Content:   lastMsg.ContentString(),
 		Timestamp: time.Now(),
 	})
 	if err != nil {
