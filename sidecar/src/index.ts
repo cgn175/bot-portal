@@ -31,7 +31,7 @@ app.get("/health", (req, res) => {
 // Create an OpenAI-compatible model that routes to the Go backend
 // instead of directly to OpenAI. The backend handles real API key resolution.
 const backendOpenAI = createOpenAI({
-  baseURL: `${config.backendUrl}/api`,
+  baseURL: `${config.backendUrl}`,
   apiKey: "backend-managed",
 });
 const backendModel = backendOpenAI.chat(config.defaultModel || "gpt-4o-mini");

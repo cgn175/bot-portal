@@ -63,6 +63,7 @@ export interface Model {
   defaultParams?: string
   createdAt?: string
   updatedAt?: string
+  isDefault?: number
 }
 
 export interface CreateModelRequest {
@@ -438,10 +439,10 @@ class ApiClient {
   }
 
   async updateCopilotKitSettings(defaultModel: string): Promise<{ defaultModel: string }> {
-    const res = await fetch(`${API_BASE}/copilotkit/settings`, {
+    const res = await fetch(`${API_BASE}/models/default`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ defaultModel })
+      body: JSON.stringify({ modelId: defaultModel })
     })
     if (!res.ok) throw new Error('Failed to update CopilotKit settings')
     return res.json()

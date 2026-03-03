@@ -3,7 +3,7 @@ import { api, Model, AuthConfig } from '../api/client'
 import Alert from '../components/Alert'
 import EmptyState from '../components/EmptyState'
 import { SkeletonCard } from '../components/LoadingState'
-import ModelForm from './ModelForm'
+import ModelForm from '../components/ModelForm'
 
 export default function Models() {
   const [models, setModels] = useState<Model[]>([])

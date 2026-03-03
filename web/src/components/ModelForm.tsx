@@ -24,7 +24,6 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
     apiKeyConfig: {}
   })
   const [defaultParams, setDefaultParams] = useState(DEFAULT_PARAMS_EXAMPLE)
-  const [setCopilotDefault, setSetCopilotDefault] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -125,11 +124,6 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
         await api.updateModel(model.id, submitData)
       } else {
         await api.createModel(submitData)
-      }
-
-      // If "Set as CopilotKit default" was checked, save to backend
-      if (setCopilotDefault) {
-        await api.updateCopilotKitSettings(formData.id)
       }
 
       onSuccess()
@@ -327,14 +321,14 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
         <div className="form-group">
           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
             <input
+              name="isDefault"
               type="checkbox"
-              checked={setCopilotDefault}
-              onChange={e => setSetCopilotDefault(e.target.checked)}
-              style={{ marginRight: '0.5rem' }}
+              checked={model.isDefault}
+              style={{ marginRight: '0.5rem', width: 'auto' }}
             />
             <span>Set as default model for CopilotKit</span>
           </label>
-          <small style={{ marginLeft: '1.5rem' }}>
+          <small>
             Use this model by default in the CopilotKit chat assistant
           </small>
         </div>

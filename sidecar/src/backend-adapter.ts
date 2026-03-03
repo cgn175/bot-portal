@@ -1,7 +1,7 @@
-import { config } from './config.js';
+import { config } from "./config.js";
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -29,13 +29,14 @@ export class BackendChatAdapter {
    * Returns async generator that yields SSE chunks.
    */
   async *streamChatCompletion(request: ChatRequest): AsyncGenerator<string> {
-    const url = `${this.backendUrl}/api/chat/completions`;
+    const url = `${this.backendUrl}/chat/completions`;
 
+    console.log("makeing request");
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'X-Inject-System-Prompt': 'true',
+        "Content-Type": "application/json",
+        "X-Inject-System-Prompt": "true",
       },
       body: JSON.stringify({
         ...request,
@@ -49,12 +50,12 @@ export class BackendChatAdapter {
     }
 
     if (!response.body) {
-      throw new Error('No response body from backend');
+      throw new Error("No response body from backend");
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
 
     try {
       while (true) {
@@ -63,14 +64,14 @@ export class BackendChatAdapter {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.trim() === '') continue;
-          if (line.startsWith('data: ')) {
+          if (line.trim() === "") continue;
+          if (line.startsWith("data: ")) {
             const data = line.slice(6);
-            if (data === '[DONE]') {
+            if (data === "[DONE]") {
               return;
             }
             yield data;
@@ -86,7 +87,7 @@ export class BackendChatAdapter {
    * Get available models from backend.
    */
   async getAvailableModels(): Promise<any[]> {
-    const url = `${this.backendUrl}/api/copilotkit/info`;
+    const url = `${this.backendUrl}/info`;
     const response = await fetch(url);
 
     if (!response.ok) {

@@ -1,43 +1,53 @@
 import {
   CopilotServiceAdapter,
   CopilotRuntimeChatCompletionRequest,
-  CopilotRuntimeChatCompletionResponse
-} from '@copilotkit/runtime';
-import { randomUUID } from 'crypto';
-import { createOpenAI } from '@ai-sdk/openai';
-import { LanguageModel } from 'ai';
-import { BackendChatAdapter } from './backend-adapter.js';
-import { config } from './config.js';
+  CopilotRuntimeChatCompletionResponse,
+} from "@copilotkit/runtime";
+import { randomUUID } from "crypto";
+import { createOpenAI } from "@ai-sdk/openai";
+import { LanguageModel } from "ai";
+import { BackendChatAdapter } from "./backend-adapter.js";
+import { config } from "./config.js";
 
 /**
  * Adapter that bridges CopilotKit's runtime to our Go backend.
  * Implements the CopilotServiceAdapter interface.
  */
 export class BackendRuntimeAdapter implements CopilotServiceAdapter {
-  provider = 'openai';
+  provider = "openai";
   model?: string;
   private languageModel: LanguageModel;
 
-  constructor(private backendAdapter: BackendChatAdapter, defaultModel?: string) {
+  constructor(
+    private backendAdapter: BackendChatAdapter,
+    defaultModel?: string,
+  ) {
     this.model = defaultModel || config.defaultModel;
 
     // Create an OpenAI-compatible model that routes to our Go backend
     // instead of directly to OpenAI. The backend handles real API key resolution.
     const backendOpenAI = createOpenAI({
-      baseURL: `${config.backendUrl}/api/copilotkit`,
-      apiKey: 'backend-managed',
+      baseURL: `${config.backendUrl}`,
+      apiKey: "backend-managed",
     });
     // Use .chat() to force the Chat Completions API (/chat/completions)
     // instead of the default Responses API (/responses)
-    this.languageModel = backendOpenAI.chat(this.model || 'gpt-4o-mini');
+    this.languageModel = backendOpenAI.chat(this.model || "gpt-4o-mini");
   }
 
   getLanguageModel(): LanguageModel {
     return this.languageModel;
   }
 
-  async process(request: CopilotRuntimeChatCompletionRequest): Promise<CopilotRuntimeChatCompletionResponse> {
-    const { messages, model, threadId: threadIdFromRequest, eventSource } = request;
+  async process(
+    request: CopilotRuntimeChatCompletionRequest,
+  ): Promise<CopilotRuntimeChatCompletionResponse> {
+    const {
+      messages,
+      model,
+      threadId: threadIdFromRequest,
+      eventSource,
+    } = request;
 
     const threadId = threadIdFromRequest ?? randomUUID();
 
@@ -47,14 +57,14 @@ export class BackendRuntimeAdapter implements CopilotServiceAdapter {
       .map((msg) => {
         if (msg.isTextMessage()) {
           return {
-            role: msg.role as 'system' | 'user' | 'assistant',
+            role: msg.role as "system" | "user" | "assistant",
             content: msg.content,
           };
         }
         // Fallback (should never reach here due to filter)
         return {
-          role: 'user' as const,
-          content: '',
+          role: "user" as const,
+          content: "",
         };
       });
 
@@ -66,7 +76,7 @@ export class BackendRuntimeAdapter implements CopilotServiceAdapter {
       try {
         // Start text message
         eventStream$.sendTextMessageStart({
-          messageId: currentMessageId
+          messageId: currentMessageId,
         });
         messageStarted = true;
 
@@ -92,7 +102,9 @@ export class BackendRuntimeAdapter implements CopilotServiceAdapter {
             if (parsed.choices && parsed.choices[0]?.delta?.tool_calls) {
               // End current text message if started
               if (messageStarted) {
-                eventStream$.sendTextMessageEnd({ messageId: currentMessageId });
+                eventStream$.sendTextMessageEnd({
+                  messageId: currentMessageId,
+                });
                 messageStarted = false;
               }
 
@@ -101,7 +113,7 @@ export class BackendRuntimeAdapter implements CopilotServiceAdapter {
 
                 eventStream$.sendActionExecutionStart({
                   actionExecutionId: toolCallId,
-                  actionName: toolCall.function?.name || 'unknown',
+                  actionName: toolCall.function?.name || "unknown",
                 });
 
                 if (toolCall.function?.arguments) {
@@ -117,7 +129,7 @@ export class BackendRuntimeAdapter implements CopilotServiceAdapter {
               }
             }
           } catch (e) {
-            console.error('Failed to parse SSE chunk:', chunk, e);
+            console.error("Failed to parse SSE chunk:", chunk, e);
           }
         }
 
@@ -125,15 +137,14 @@ export class BackendRuntimeAdapter implements CopilotServiceAdapter {
         if (messageStarted) {
           eventStream$.sendTextMessageEnd({ messageId: currentMessageId });
         }
-
       } catch (error: any) {
-        console.error('Error in backend streaming:', error);
+        console.error("Error in backend streaming:", error);
 
         // Send error event
         eventStream$.next({
-          type: 'RunError' as any,
-          message: error.message || 'Unknown error occurred',
-          code: error.code || 'BACKEND_ERROR',
+          type: "RunError" as any,
+          message: error.message || "Unknown error occurred",
+          code: error.code || "BACKEND_ERROR",
         });
       }
     });
