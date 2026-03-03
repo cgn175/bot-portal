@@ -57,3 +57,26 @@ lint:
 fmt:
 	$(GO) fmt ./...
 	$(GO) vet ./...
+
+# CopilotKit Sidecar targets
+.PHONY: sidecar-install sidecar-dev sidecar-build dev-all
+
+sidecar-install:
+	cd sidecar && npm install
+
+sidecar-dev:
+	cd sidecar && npm run dev
+
+sidecar-build:
+	cd sidecar && npm run build
+
+# Run all services in development
+dev-all:
+	@echo "Starting Go backend..."
+	@make run &
+	@sleep 2
+	@echo "Starting Node.js sidecar..."
+	@cd sidecar && npm run dev &
+	@sleep 2
+	@echo "Starting React frontend..."
+	@cd web && npm run dev

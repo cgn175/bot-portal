@@ -23,6 +23,23 @@ services:
     networks:
       - bot-portal-network
 
+  copilot-sidecar:
+    build:
+      context: ./sidecar
+      dockerfile: Dockerfile
+    container_name: copilot-sidecar
+    ports:
+      - "3001:3001"
+    environment:
+      - COPILOT_PORT=3001
+      - BACKEND_URL=http://portal:8080
+      - CORS_ORIGIN=http://localhost:5173
+    depends_on:
+      - portal
+    restart: unless-stopped
+    networks:
+      - bot-portal-network
+
 networks:
   bot-portal-network:
     driver: bridge

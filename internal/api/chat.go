@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -15,14 +16,42 @@ import (
 
 // ChatRequest represents a chat completion request
 type ChatRequest struct {
-	Model    string        `json:"model"`
-	Messages []ChatMessage `json:"messages"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
+	Temperature *float64      `json:"temperature,omitempty"`
+	TopP        *float64      `json:"top_p,omitempty"`
+	Stream      bool          `json:"stream,omitempty"`
 }
 
-// ChatMessage represents a single message in the conversation
+// ChatMessage represents a single message in the conversation.
+// Uses json.RawMessage for Content and ToolCalls to transparently proxy
+// all fields to upstream LLM providers without loss.
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string          `json:"role"`
+	Content    json.RawMessage `json:"content"`
+	ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+	Name       string          `json:"name,omitempty"`
+}
+
+// ContentString returns the content as a plain string, handling both
+// JSON string values and other types (returns empty string for non-strings).
+func (m ChatMessage) ContentString() string {
+	if len(m.Content) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(m.Content, &s); err == nil {
+		return s
+	}
+	return string(m.Content)
+}
+
+// NewChatMessage creates a ChatMessage with a string content value.
+func NewChatMessage(role, content string) ChatMessage {
+	contentJSON, _ := json.Marshal(content)
+	return ChatMessage{Role: role, Content: json.RawMessage(contentJSON)}
 }
 
 // ChatResponse represents a chat completion response
@@ -58,6 +87,27 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		http.Error(w, "Model not found", http.StatusNotFound)
 		return
 	}
+
+	// Check if this is a Claude model
+	if isClaudeModel(model.ModelIdentifier) {
+		log.Printf("[Adaptive Chat] Detected Claude model: %s", model.ModelIdentifier)
+
+		// Transform OpenAI → Claude
+		claudeReq := transformToClaudeFormat(chatReq)
+
+		log.Printf("[Format Transform] OpenAI → Claude: system=%v, messages=%d",
+			len(claudeReq.System) > 0, len(claudeReq.Messages))
+
+		// TODO: Proxy as Claude request
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotImplemented)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Claude model proxy not yet implemented",
+		})
+		return
+	}
+
+	log.Printf("[Adaptive Chat] Using OpenAI format for model: %s", model.ModelIdentifier)
 
 	// Find auth config for this model's provider
 	authConfigs, err := r.authConfigStore.List()
