@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useIdentityFile } from '../hooks/useIdentityFiles'
 import Alert from '../components/Alert'
@@ -33,7 +33,7 @@ export default function IdentityFileEditor() {
   } = useIdentityFile(agentId, selectedFile)
 
   // Update edited content when file loads
-  useMemo(() => {
+  useEffect(() => {
     setEditedContent(content)
     setHasChanges(false)
     setSaveError(null)
@@ -255,16 +255,16 @@ export default function IdentityFileEditor() {
                 padding: '1rem',
                 overflow: 'auto'
               }}>
-                <div
-                  className="markdown-preview"
-                  style={{
-                    fontSize: 'var(--font-size-base)',
-                    lineHeight: '1.6'
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: renderMarkdown(editedContent || '*No content*')
-                  }}
-                />
+                <pre style={{
+                  fontSize: 'var(--font-size-sm)',
+                  lineHeight: '1.6',
+                  fontFamily: 'var(--font-mono, monospace)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  margin: 0
+                }}>
+                  {editedContent || 'No content'}
+                </pre>
               </div>
             )}
           </div>
@@ -292,32 +292,4 @@ export default function IdentityFileEditor() {
       </div>
     </div>
   )
-}
-
-// Simple markdown renderer for preview
-function renderMarkdown(content: string): string {
-  if (!content) return ''
-
-  return content
-    // Escape HTML
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // Headers
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    // Bold and italic
-    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    // Code blocks
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Lists
-    .replace(/^\s*-\s+(.*$)/gim, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
-    // Line breaks
-    .replace(/\n/g, '<br>')
 }

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/pkg/stdcopy"
 )
 
 // MaxIdentityFileSize is the maximum size for identity files (16KB)
@@ -65,39 +64,28 @@ func (m *Manager) ReadWorkspaceFile(ctx context.Context, agentID string, filenam
 		return nil, fmt.Errorf("failed to find container for agent %s: %w", agentID, err)
 	}
 
-	// Read the file using docker cp (via exec cat for simplicity)
+	// Read the file using Docker CopyFromContainer API
 	workspacePath := fmt.Sprintf("/workspace/%s", filename)
-	execConfig := container.ExecOptions{
-		Cmd:          []string{"cat", workspacePath},
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	execResp, err := m.cli.ContainerExecCreate(ctx, cont.ID, execConfig)
+	reader, _, err := m.cli.CopyFromContainer(ctx, cont.ID, workspacePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create exec: %w", err)
+		// File doesn't exist in container
+		if strings.Contains(err.Error(), "No such container path") || strings.Contains(err.Error(), "not found") {
+			return []byte{}, nil
+		}
+		return nil, fmt.Errorf("failed to copy file from container: %w", err)
 	}
+	defer reader.Close()
 
-	attachResp, err := m.cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
+	tr := tar.NewReader(reader)
+	_, err = tr.Next()
 	if err != nil {
-		return nil, fmt.Errorf("failed to attach to exec: %w", err)
+		return nil, fmt.Errorf("failed to read tar header: %w", err)
 	}
-	defer attachResp.Close()
 
-	// Read the output
-	var stdout, stderr bytes.Buffer
-	_, err = stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader)
+	content, err := io.ReadAll(tr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read exec output: %w", err)
+		return nil, fmt.Errorf("failed to read file content: %w", err)
 	}
-
-	// Check if file exists (stderr will have error message if not)
-	if stderr.Len() > 0 {
-		// File doesn't exist, return empty content (not an error)
-		return []byte{}, nil
-	}
-
-	content := stdout.Bytes()
 
 	// Check size limit
 	if len(content) > MaxIdentityFileSize {

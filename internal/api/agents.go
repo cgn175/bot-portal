@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
 	"github.com/zeroclaw/bot-portal/internal/docker"
@@ -1003,6 +1004,6 @@ func (r *Router) updateIdentityFile(w http.ResponseWriter, req *http.Request, ag
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":   true,
 		"filename":  filename,
-		"charCount": len(request.Content),
+		"charCount": utf8.RuneCountInString(request.Content),
 	})
 }

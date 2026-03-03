@@ -450,13 +450,13 @@ class ApiClient {
   }
 
   async getIdentityFile(agentId: string, filename: string): Promise<{ filename: string; content: string }> {
-    const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files/${filename}`)
+    const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files/${encodeURIComponent(filename)}`)
     if (!res.ok) throw new Error(`Failed to fetch identity file ${filename}`)
     return res.json()
   }
 
   async updateIdentityFile(agentId: string, filename: string, content: string): Promise<UpdateIdentityFileResponse> {
-    const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files/${filename}`, {
+    const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files/${encodeURIComponent(filename)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })

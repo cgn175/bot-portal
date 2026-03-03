@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"time"
+	"unicode/utf8"
 
 	"github.com/zeroclaw/bot-portal/internal/models"
 )
@@ -63,7 +64,7 @@ func (s *IdentityFileStore) ListByAgent(agentID string) ([]*models.AgentIdentity
 // Create creates a new identity file record
 func (s *IdentityFileStore) Create(file *models.AgentIdentityFile) error {
 	file.UpdatedAt = time.Now()
-	file.CharCount = len(file.Content)
+	file.CharCount = utf8.RuneCountInString(file.Content)
 
 	result, err := s.db.Exec(`
 		INSERT INTO agent_identity_files (agent_id, filename, content, char_count, updated_at)
@@ -84,7 +85,7 @@ func (s *IdentityFileStore) Create(file *models.AgentIdentityFile) error {
 // Update updates an existing identity file
 func (s *IdentityFileStore) Update(file *models.AgentIdentityFile) error {
 	file.UpdatedAt = time.Now()
-	file.CharCount = len(file.Content)
+	file.CharCount = utf8.RuneCountInString(file.Content)
 
 	_, err := s.db.Exec(`
 		UPDATE agent_identity_files SET content = ?, char_count = ?, updated_at = ?

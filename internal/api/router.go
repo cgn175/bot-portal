@@ -85,20 +85,17 @@ func (r *Router) Run(addr string) error {
 	// REST API endpoints
 	// Agent management
 	mux.HandleFunc("/api/agents", r.handleAgents)
-	mux.HandleFunc("/api/agents/", r.handleAgentDetail)
-	mux.HandleFunc("/api/agents-stream", r.streamAgents)
-
-	// Identity file endpoints
 	mux.HandleFunc("/api/agents/", func(w http.ResponseWriter, req *http.Request) {
-		// Check if this is an identity-files request
-		if strings.Contains(req.URL.Path, "/identity-files/") {
+		path := req.URL.Path
+		if strings.Contains(path, "/identity-files/") {
 			r.handleAgentIdentityFileDetail(w, req)
-		} else if strings.HasSuffix(req.URL.Path, "/identity-files") {
+		} else if strings.HasSuffix(path, "/identity-files") {
 			r.handleAgentIdentityFiles(w, req)
 		} else {
 			r.handleAgentDetail(w, req)
 		}
 	})
+	mux.HandleFunc("/api/agents-stream", r.streamAgents)
 
 	// Channel management
 	mux.HandleFunc("/api/channels", r.handleChannels)
