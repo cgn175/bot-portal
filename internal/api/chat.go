@@ -90,8 +90,14 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	// Resolve model (with fallback chain)
-	model, err := r.resolveModel(chatReq.Model)
+	// Resolve model: for CopilotKit requests (identified by X-Inject-System-Prompt header),
+	// always use backend-defined model, ignoring the request model
+	requestedModel := chatReq.Model
+	if req.Header.Get("X-Inject-System-Prompt") == "true" {
+		requestedModel = "" // Force fallback to backend-defined model
+	}
+	
+	model, err := r.resolveModel(requestedModel)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
