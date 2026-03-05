@@ -79,4 +79,4 @@ dev-all:
 	@cd sidecar && npm run dev &
 	@sleep 2
 	@echo "Starting React frontend..."
-	@cd web && npm run dev
+	@cd web && npx vite --host

@@ -613,6 +613,13 @@ func (m *Manager) GetContainerIP(ctx context.Context, containerID string) (strin
 	return "", fmt.Errorf("container not connected to bot-portal or bot-portal-network")
 }
 
+// RegenerateConfig regenerates the config.toml for an agent on the host.
+// Since the file is bind-mounted, the running container sees the updated file.
+func (m *Manager) RegenerateConfig(config ContainerConfig, gatewayPort string) error {
+	_, err := generateAgentConfig(config, gatewayPort)
+	return err
+}
+
 // Close closes the Docker manager
 func (m *Manager) Close() error {
 	if m.cli != nil {

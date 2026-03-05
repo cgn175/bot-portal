@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
+	"github.com/zeroclaw/bot-portal/internal/api/agents"
 	"github.com/zeroclaw/bot-portal/internal/docker"
 	"github.com/zeroclaw/bot-portal/internal/store"
 )
@@ -23,6 +24,7 @@ type Router struct {
 	messageStore       *store.MessageStore
 	modelStore         *store.ModelStore
 	authConfigStore    *store.AuthConfigStore
+	agentHandler       *agents.Handler
 	a2aRouter          *a2a.Router
 	skipModelDiscovery bool // For testing: skip async model discovery
 
@@ -39,6 +41,8 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	modelStore := store.NewModelStore(db)
 	authConfigStore := store.NewAuthConfigStore(db)
 
+	agentHandler := agents.NewHandler(db, dockerMgr, agentStore, modelStore, authConfigStore, messageStore)
+
 	router := &Router{
 		db:              db,
 		dockerMgr:       dockerMgr,
@@ -47,6 +51,7 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 		messageStore:    messageStore,
 		modelStore:      modelStore,
 		authConfigStore: authConfigStore,
+		agentHandler:    agentHandler,
 		taskStreamConns: make(map[string]map[string]chan *a2a.TaskUpdate),
 	}
 
@@ -58,6 +63,10 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	a2aRouter.AppendMessage = router.appendMessage
 	a2aRouter.GetAgents = router.getAgentsForRouting
 	router.a2aRouter = a2aRouter
+
+	// Wire up agent handler callbacks
+	agentHandler.CreateTaskWithID = router.createTaskWithID
+	agentHandler.SubscribeToAgentSSE = router.subscribeToAgentSSE
 
 	// Ensure general channel exists
 	channelStore.EnsureGeneralChannel()
@@ -84,19 +93,19 @@ func (r *Router) Run(addr string) error {
 
 	// REST API endpoints
 	// Agent management
-	mux.HandleFunc("/api/agents", r.handleAgents)
+	mux.HandleFunc("/api/agents", r.agentHandler.HandleAgents)
 	mux.HandleFunc("/api/agents/", func(w http.ResponseWriter, req *http.Request) {
 		path := req.URL.Path
 		log.Printf("Agent router: path=%q method=%s", path, req.Method)
 		if strings.Contains(path, "/identity-files/") {
-			r.handleAgentIdentityFileDetail(w, req)
+			r.agentHandler.HandleAgentIdentityFileDetail(w, req)
 		} else if strings.HasSuffix(path, "/identity-files") {
-			r.handleAgentIdentityFiles(w, req)
+			r.agentHandler.HandleAgentIdentityFiles(w, req)
 		} else {
-			r.handleAgentDetail(w, req)
+			r.agentHandler.HandleAgentDetail(w, req)
 		}
 	})
-	mux.HandleFunc("/api/agents-stream", r.streamAgents)
+	mux.HandleFunc("/api/agents-stream", r.agentHandler.StreamAgents)
 
 	// Channel management
 	mux.HandleFunc("/api/channels", r.handleChannels)

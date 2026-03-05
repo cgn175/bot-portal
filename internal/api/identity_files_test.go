@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	agentsHandler "github.com/zeroclaw/bot-portal/internal/api/agents"
 	"github.com/zeroclaw/bot-portal/internal/models"
 	"github.com/zeroclaw/bot-portal/internal/store"
 	_ "modernc.org/sqlite"
@@ -61,13 +62,13 @@ func TestHandleAgentIdentityFiles_List(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/agents/test-agent/identity-files", nil)
 	w := httptest.NewRecorder()
 
-	router.handleAgentIdentityFiles(w, req)
+	router.agentHandler.HandleAgentIdentityFiles(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	var response AgentIdentityFilesResponse
+	var response agentsHandler.AgentIdentityFilesResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestHandleAgentIdentityFiles_AgentNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/agents/nonexistent/identity-files", nil)
 	w := httptest.NewRecorder()
 
-	router.handleAgentIdentityFiles(w, req)
+	router.agentHandler.HandleAgentIdentityFiles(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", w.Code)
@@ -125,7 +126,7 @@ func TestHandleAgentIdentityFileDetail_Get(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/agents/test-agent/identity-files/IDENTITY.md", nil)
 	w := httptest.NewRecorder()
 
-	router.handleAgentIdentityFileDetail(w, req)
+	router.agentHandler.HandleAgentIdentityFileDetail(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
@@ -163,14 +164,14 @@ func TestHandleAgentIdentityFileDetail_Update(t *testing.T) {
 	router := NewRouter(db, nil)
 
 	// Test update endpoint
-	request := UpdateIdentityFileRequest{Content: "New content here"}
+	request := agentsHandler.UpdateIdentityFileRequest{Content: "New content here"}
 	body, _ := json.Marshal(request)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/agents/test-agent/identity-files/SOUL.md", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	router.handleAgentIdentityFileDetail(w, req)
+	router.agentHandler.HandleAgentIdentityFileDetail(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
@@ -222,14 +223,14 @@ func TestHandleAgentIdentityFileDetail_UpdateSizeLimit(t *testing.T) {
 
 	// Test with content exceeding 16KB
 	largeContent := strings.Repeat("x", 16*1024+1)
-	request := UpdateIdentityFileRequest{Content: largeContent}
+	request := agentsHandler.UpdateIdentityFileRequest{Content: largeContent}
 	body, _ := json.Marshal(request)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/agents/test-agent/identity-files/SOUL.md", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	router.handleAgentIdentityFileDetail(w, req)
+	router.agentHandler.HandleAgentIdentityFileDetail(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400 for oversized content, got %d", w.Code)
@@ -257,7 +258,7 @@ func TestHandleAgentIdentityFileDetail_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/agents/test-agent/identity-files/IDENTITY.md", nil)
 	w := httptest.NewRecorder()
 
-	router.handleAgentIdentityFileDetail(w, req)
+	router.agentHandler.HandleAgentIdentityFileDetail(w, req)
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Expected status 405, got %d", w.Code)
@@ -283,7 +284,7 @@ func TestHandleAgentIdentityFileDetail_InvalidPath(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			w := httptest.NewRecorder()
 
-			router.handleAgentIdentityFileDetail(w, req)
+			router.agentHandler.HandleAgentIdentityFileDetail(w, req)
 
 			if w.Code != http.StatusBadRequest {
 				t.Errorf("Expected status 400, got %d", w.Code)

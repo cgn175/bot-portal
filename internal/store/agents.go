@@ -25,6 +25,7 @@ type Agent struct {
 	Config       json.RawMessage `json:"config"`
 	ModelID      string          `json:"modelId"`
 	AuthConfigID string          `json:"authConfigId"`
+	PeerAgentIDs json.RawMessage `json:"peerAgentIds"`
 	CreatedAt    time.Time       `json:"createdAt"`
 	UpdatedAt    time.Time       `json:"updatedAt"`
 }
@@ -43,19 +44,24 @@ func NewAgentStore(db *sql.DB) *AgentStore {
 func (s *AgentStore) Create(agent *Agent) error {
 	agentCardJSON, _ := json.Marshal(agent.AgentCard)
 	configJSON, _ := json.Marshal(agent.Config)
+	peerAgentIDsJSON := agent.PeerAgentIDs
+	if len(peerAgentIDsJSON) == 0 {
+		peerAgentIDsJSON = json.RawMessage("[]")
+	}
 
 	if agent.AgentType == "" {
 		agent.AgentType = "docker"
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO agents (id, name, description, image, agent_type, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO agents (id, name, description, image, agent_type, status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, peer_agent_ids, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		agent.ID, agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status,
 		agent.ContainerID, agent.Endpoint, agent.ListenPort, agent.BearerToken,
 		agentCardJSON, configJSON,
 		sql.NullString{String: agent.ModelID, Valid: agent.ModelID != ""},
 		sql.NullString{String: agent.AuthConfigID, Valid: agent.AuthConfigID != ""},
+		string(peerAgentIDsJSON),
 		agent.CreatedAt, agent.UpdatedAt)
 	return err
 }
@@ -65,13 +71,14 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 	var agent Agent
 	var agentCardJSON, configJSON []byte
 	var modelID, authConfigID sql.NullString
+	var peerAgentIDsStr sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, created_at, updated_at
+		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, COALESCE(peer_agent_ids, '[]'), created_at, updated_at
 		FROM agents WHERE id = ?`, id).Scan(
 		&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 		&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
-		&agentCardJSON, &configJSON, &modelID, &authConfigID, &agent.CreatedAt, &agent.UpdatedAt)
+		&agentCardJSON, &configJSON, &modelID, &authConfigID, &peerAgentIDsStr, &agent.CreatedAt, &agent.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -82,6 +89,11 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 
 	agent.ModelID = modelID.String
 	agent.AuthConfigID = authConfigID.String
+	if peerAgentIDsStr.Valid && peerAgentIDsStr.String != "" {
+		agent.PeerAgentIDs = json.RawMessage(peerAgentIDsStr.String)
+	} else {
+		agent.PeerAgentIDs = json.RawMessage("[]")
+	}
 
 	if len(agentCardJSON) > 0 {
 		if err := json.Unmarshal(agentCardJSON, &agent.AgentCard); err != nil {
@@ -100,7 +112,7 @@ func (s *AgentStore) GetByID(id string) (*Agent, error) {
 // List retrieves all agents
 func (s *AgentStore) List() ([]*Agent, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, created_at, updated_at
+		SELECT id, name, description, image, COALESCE(agent_type, 'docker'), status, container_id, endpoint, listen_port, bearer_token, agent_card, config, model_id, auth_config_id, COALESCE(peer_agent_ids, '[]'), created_at, updated_at
 		FROM agents`)
 	if err != nil {
 		return nil, err
@@ -112,17 +124,23 @@ func (s *AgentStore) List() ([]*Agent, error) {
 		var agent Agent
 		var agentCardJSON, configJSON []byte
 		var modelID, authConfigID sql.NullString
+		var peerAgentIDsStr sql.NullString
 
 		err := rows.Scan(
 			&agent.ID, &agent.Name, &agent.Description, &agent.Image, &agent.AgentType, &agent.Status,
 			&agent.ContainerID, &agent.Endpoint, &agent.ListenPort, &agent.BearerToken,
-			&agentCardJSON, &configJSON, &modelID, &authConfigID, &agent.CreatedAt, &agent.UpdatedAt)
+			&agentCardJSON, &configJSON, &modelID, &authConfigID, &peerAgentIDsStr, &agent.CreatedAt, &agent.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
 
 		agent.ModelID = modelID.String
 		agent.AuthConfigID = authConfigID.String
+		if peerAgentIDsStr.Valid && peerAgentIDsStr.String != "" {
+			agent.PeerAgentIDs = json.RawMessage(peerAgentIDsStr.String)
+		} else {
+			agent.PeerAgentIDs = json.RawMessage("[]")
+		}
 
 		if len(agentCardJSON) > 0 {
 			if err := json.Unmarshal(agentCardJSON, &agent.AgentCard); err != nil {
@@ -146,14 +164,19 @@ func (s *AgentStore) Update(agent *Agent) error {
 	agent.UpdatedAt = time.Now()
 	agentCardJSON, _ := json.Marshal(agent.AgentCard)
 	configJSON, _ := json.Marshal(agent.Config)
+	peerAgentIDsJSON := agent.PeerAgentIDs
+	if len(peerAgentIDsJSON) == 0 {
+		peerAgentIDsJSON = json.RawMessage("[]")
+	}
 
 	_, err := s.db.Exec(`
-		UPDATE agents SET name = ?, description = ?, image = ?, agent_type = ?, status = ?, container_id = ?, endpoint = ?, listen_port = ?, bearer_token = ?, agent_card = ?, config = ?, model_id = ?, auth_config_id = ?, updated_at = ?
+		UPDATE agents SET name = ?, description = ?, image = ?, agent_type = ?, status = ?, container_id = ?, endpoint = ?, listen_port = ?, bearer_token = ?, agent_card = ?, config = ?, model_id = ?, auth_config_id = ?, peer_agent_ids = ?, updated_at = ?
 		WHERE id = ?`,
 		agent.Name, agent.Description, agent.Image, agent.AgentType, agent.Status, agent.ContainerID,
 		agent.Endpoint, agent.ListenPort, agent.BearerToken, agentCardJSON, configJSON,
 		sql.NullString{String: agent.ModelID, Valid: agent.ModelID != ""},
 		sql.NullString{String: agent.AuthConfigID, Valid: agent.AuthConfigID != ""},
+		string(peerAgentIDsJSON),
 		agent.UpdatedAt, agent.ID)
 	return err
 }

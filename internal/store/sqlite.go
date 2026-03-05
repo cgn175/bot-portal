@@ -108,6 +108,7 @@ func RunMigrations(db *sql.DB) error {
 		{"agents", "model_id", "TEXT"},
 		{"agents", "auth_config_id", "TEXT"},
 		{"models", "is_default", "INTEGER DEFAULT 0"},
+		{"agents", "peer_agent_ids", "TEXT DEFAULT '[]'"},
 	}
 	for _, m := range alterMigrations {
 		var count int
