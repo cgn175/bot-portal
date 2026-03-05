@@ -285,6 +285,15 @@ endpoint = "{{ .Endpoint }}"
 bearer_token = "{{ .BearerToken }}"
 enabled = true
 {{ end }}
+
+[autonomy]
+auto_approve = ["file_read", "memory_recall", "a2a_send"]
+level = "full"
+workspace_only = true
+allowed_commands = ["*"]
+forbidden_paths = []
+max_actions_per_hour = 50
+max_cost_per_day_cents = 200
 `))
 
 // generateAgentConfig creates a zeroclaw config.toml with A2A enabled
@@ -298,7 +307,7 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 	// For Docker agents, we always derive the endpoint from the AgentID
 	for i := range peers {
 		// Assume internal Docker hostname: http://<AgentID>:<port>
-		peers[i].Endpoint = fmt.Sprintf("http://%s:%s", peers[i].ID, gatewayPort)
+		peers[i].Endpoint = fmt.Sprintf("http://bot-portal-agent-%s:%s", peers[i].ID, gatewayPort)
 	}
 
 	// Always add portal as a peer so the agent recognizes portal's bearer token
