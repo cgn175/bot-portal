@@ -19,10 +19,12 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
     endpoint: '',
     description: '',
     modelId: '',
-    authConfigId: ''
+    authConfigId: '',
+    peerAgentIds: []
   })
   const [models, setModels] = useState<Model[]>([])
   const [authConfigs, setAuthConfigs] = useState<AuthConfig[]>([])
+  const [allAgents, setAllAgents] = useState<Agent[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [fetchingDeps, setFetchingDeps] = useState(true)
@@ -37,7 +39,8 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
         endpoint: agent.endpoint || '',
         description: agent.description || '',
         modelId: agent.modelId || '',
-        authConfigId: agent.authConfigId || ''
+        authConfigId: agent.authConfigId || '',
+        peerAgentIds: agent.peerAgentIds || []
       })
     }
   }, [agent, formData.id])
@@ -46,12 +49,14 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
     // Load available models and auth configs
     const loadDependencies = async () => {
       try {
-        const [modelsData, authConfigsData] = await Promise.all([
+        const [modelsData, authConfigsData, agentsData] = await Promise.all([
           api.listModels(),
-          api.listAuthConfigs()
+          api.listAuthConfigs(),
+          api.listAgents()
         ])
         setModels(modelsData)
         setAuthConfigs(authConfigsData)
+        setAllAgents(agentsData)
       } catch (err) {
         console.error('Failed to load form dependencies', err)
       } finally {
@@ -300,6 +305,56 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
               ? 'No models found for this provider — try syncing on the Models page'
               : 'The AI model this agent will use'}
           </small>
+        </div>
+
+        <div className="form-group">
+          <label>Paired Peers</label>
+          <div style={{
+            border: '1px solid var(--color-border)',
+            borderRadius: '6px',
+            padding: '0.5rem',
+            maxHeight: '160px',
+            overflowY: 'auto',
+            background: 'var(--color-bg-secondary, var(--color-bg))'
+          }}>
+            {allAgents.filter(a => a.id !== formData.id).length === 0 ? (
+              <div style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                No other agents available
+              </div>
+            ) : (
+              allAgents.filter(a => a.id !== formData.id).map(a => (
+                <label
+                  key={a.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.375rem 0.5rem',
+                    cursor: 'pointer',
+                    borderRadius: '4px',
+                    fontSize: '0.875rem'
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-bg-hover, rgba(255,255,255,0.05))')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.peerAgentIds?.includes(a.id) || false}
+                    onChange={e => {
+                      const current = formData.peerAgentIds || []
+                      const updated = e.target.checked
+                        ? [...current, a.id]
+                        : current.filter(id => id !== a.id)
+                      setFormData(prev => ({ ...prev, peerAgentIds: updated }))
+                    }}
+                  />
+                  <span>{a.name}</span>
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>({a.id})</span>
+                </label>
+              ))
+            )}
+          </div>
+          <small>Select agents that can communicate with this agent via A2A</small>
         </div>
       </form>
     </Modal>

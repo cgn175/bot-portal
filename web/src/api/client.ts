@@ -8,6 +8,7 @@ export interface Agent {
   image: string
   modelId?: string
   authConfigId?: string
+  peerAgentIds?: string[]
   bearer_token?: string
   created_at?: string
   updated_at?: string
@@ -45,6 +46,7 @@ export interface CreateAgentRequest {
   description?: string
   modelId?: string
   authConfigId?: string
+  peerAgentIds?: string[]
 }
 
 export interface CreateTaskRequest {
