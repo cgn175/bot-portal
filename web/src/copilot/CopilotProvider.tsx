@@ -14,7 +14,7 @@ interface CopilotProviderProps {
 export function CopilotProvider({ children }: CopilotProviderProps) {
   const runtimeUrl = "/copilotkit";
   return (
-    <CopilotKit runtimeUrl={runtimeUrl} showDevConsole={import.meta.env.DEV}>
+    <CopilotKit runtimeUrl={runtimeUrl} showDevConsole={true}>
       {children}
     </CopilotKit>
   );
