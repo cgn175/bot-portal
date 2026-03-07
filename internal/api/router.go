@@ -91,6 +91,11 @@ func (r *Router) Run(addr string) error {
 	mux.HandleFunc("/tasks", r.requireBearerToken(r.handleTasks))
 	mux.HandleFunc("/tasks/", r.requireBearerToken(r.handleTaskDetail))
 
+	// A2A relay endpoint — agents send inter-agent messages here instead of directly.
+	// The portal logs every message and forwards it to the real recipient.
+	// URL pattern: /a2a/relay/{recipientID}/tasks
+	mux.HandleFunc("/a2a/relay/", r.requireBearerToken(r.handleA2ARelay))
+
 	// REST API endpoints
 	// Agent management
 	mux.HandleFunc("/api/agents", r.agentHandler.HandleAgents)
@@ -243,6 +248,10 @@ func (r *Router) requireBearerToken(next http.HandlerFunc) http.HandlerFunc {
 		for _, agent := range agents {
 			if agent.BearerToken == token {
 				valid = true
+				// Auto-set X-Agent-ID from token so the sender is always identified
+				if req.Header.Get("X-Agent-ID") == "" {
+					req.Header.Set("X-Agent-ID", agent.ID)
+				}
 				break
 			}
 		}

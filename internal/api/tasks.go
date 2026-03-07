@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -301,4 +302,220 @@ func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {
 	}
 
 	return result, nil
+}
+
+// ============================================================================
+// A2A Relay Handler — Hub-and-Spoke Inter-Agent Communication
+// ============================================================================
+
+// handleA2ARelay intercepts agent-to-agent messages so they flow through the portal.
+// URL pattern: /a2a/relay/{recipientID}/tasks
+//
+// The agent's a2a_send tool thinks it's talking directly to a peer, but the
+// peer endpoint in its config actually points here. The portal:
+//  1. Identifies the sender (from bearer token, set by requireBearerToken middleware)
+//  2. Extracts the recipient from the URL path
+//  3. Logs the message in task_logs (visible in the UI)
+//  4. Forwards the task to the real recipient agent
+//  5. Subscribes to the recipient's SSE stream and relays responses back
+func (r *Router) handleA2ARelay(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse /a2a/relay/{recipientID}/tasks
+	path := strings.TrimPrefix(req.URL.Path, "/a2a/relay/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) < 2 || parts[0] == "" || parts[1] != "tasks" {
+		http.Error(w, "Invalid relay path. Expected /a2a/relay/{recipientID}/tasks", http.StatusBadRequest)
+		return
+	}
+	recipientID := parts[0]
+
+	// Sender is auto-set by requireBearerToken middleware
+	senderID := req.Header.Get("X-Agent-ID")
+	if senderID == "" {
+		http.Error(w, "Could not identify sender", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse the task creation request
+	var createReq a2a.CreateTaskRequest
+	if err := json.NewDecoder(req.Body).Decode(&createReq); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Look up the recipient agent
+	recipient, err := r.agentStore.GetByID(recipientID)
+	if err != nil || recipient == nil {
+		http.Error(w, fmt.Sprintf("Recipient agent %q not found", recipientID), http.StatusNotFound)
+		return
+	}
+
+	// Build a direct channel ID between sender and recipient
+	channelID := a2a.ChannelID(senderID, recipientID)
+
+	log.Printf("[A2A Relay] %s → %s (channel: %s) message: %s",
+		senderID, recipientID, channelID, createReq.Message.Content)
+
+	// 1. Log the message in task_logs (this makes it visible in the frontend)
+	taskID, err := r.createTask(channelID, senderID, recipientID, createReq.Message)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create task: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Forward to the real recipient agent asynchronously
+	go r.relayToRecipient(recipient, taskID, createReq, senderID)
+
+	// 3. Return task_id to the sender (same response format as direct A2A)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(a2a.CreateTaskResponse{TaskID: taskID})
+}
+
+// relayToRecipient forwards a relayed task to the actual recipient agent
+// and subscribes to its SSE stream to capture responses.
+func (r *Router) relayToRecipient(recipient *store.Agent, portalTaskID string, req a2a.CreateTaskRequest, senderID string) {
+	if recipient.Endpoint == "" {
+		log.Printf("[A2A Relay] Recipient %s has no endpoint, cannot forward", recipient.ID)
+		r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusFailed))
+		return
+	}
+
+	url := fmt.Sprintf("%s/tasks", recipient.Endpoint)
+	body, _ := json.Marshal(req)
+
+	log.Printf("[A2A Relay] Forwarding task %s to %s at %s", portalTaskID, recipient.ID, url)
+
+	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("[A2A Relay] Failed to create request: %v", err)
+		r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusFailed))
+		return
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+recipient.BearerToken)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Agent-ID", senderID)
+	httpReq.Header.Set("X-Channel-ID", a2a.ChannelID(senderID, recipient.ID))
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("[A2A Relay] Failed to forward task %s to %s: %v", portalTaskID, recipient.ID, err)
+		r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusFailed))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("[A2A Relay] Recipient %s returned error %d: %s", recipient.ID, resp.StatusCode, string(respBody))
+		r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusFailed))
+		return
+	}
+
+	// Parse the agent's response to get its task ID.
+	// The agent returns {"task":{"id":"...","status":"pending",...}} (ZeroClaw A2A format),
+	// not {"task_id":"..."} — we must extract the nested task.id.
+	var agentResp struct {
+		Task struct {
+			ID string `json:"id"`
+		} `json:"task"`
+		TaskID string `json:"task_id"` // fallback: some agents may use flat format
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[A2A Relay] Failed to read response from %s: %v", recipient.ID, err)
+		r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusFailed))
+		return
+	}
+	if err := json.Unmarshal(respBody, &agentResp); err != nil {
+		log.Printf("[A2A Relay] Failed to parse response from %s: %s", recipient.ID, string(respBody))
+		r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusFailed))
+		return
+	}
+	agentTaskID := agentResp.Task.ID
+	if agentTaskID == "" {
+		agentTaskID = agentResp.TaskID // fallback to flat format
+	}
+	if agentTaskID == "" {
+		log.Printf("[A2A Relay] No task ID in response from %s: %s", recipient.ID, string(respBody))
+		r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusFailed))
+		return
+	}
+	log.Printf("[A2A Relay] Task forwarded to %s: portal=%s agent=%s", recipient.ID, portalTaskID, agentTaskID)
+
+	// Subscribe to the agent's SSE stream using the AGENT's task ID,
+	// but write updates back to our portal DB using portalTaskID.
+	r.subscribeToRelayedAgentSSE(recipient, agentTaskID, portalTaskID)
+}
+
+// subscribeToRelayedAgentSSE connects to the agent's SSE stream using the agent's
+// own task ID, but persists updates and broadcasts to the frontend using the portal's
+// task ID. This bridges the two ID spaces.
+func (r *Router) subscribeToRelayedAgentSSE(agent *store.Agent, agentTaskID, portalTaskID string) {
+	streamURL := fmt.Sprintf("%s/tasks/%s/stream", agent.Endpoint, agentTaskID)
+	log.Printf("[A2A Relay] Subscribing to SSE: agent=%s agentTask=%s portalTask=%s", agent.ID, agentTaskID, portalTaskID)
+
+	req, err := http.NewRequest("GET", streamURL, nil)
+	if err != nil {
+		log.Printf("[A2A Relay] Failed to create SSE request: %v", err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+agent.BearerToken)
+	req.Header.Set("Accept", "text/event-stream")
+
+	client := &http.Client{Timeout: 0} // No timeout for SSE
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[A2A Relay] Failed to connect to SSE stream: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[A2A Relay] SSE stream returned status %d for agentTask=%s", resp.StatusCode, agentTaskID)
+		return
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("[A2A Relay] SSE stream error for agentTask=%s: %v", agentTaskID, err)
+			}
+			break
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			log.Printf("[A2A Relay] SSE event agentTask=%s → portalTask=%s: %s", agentTaskID, portalTaskID, data)
+
+			var update a2a.TaskUpdate
+			if err := json.Unmarshal([]byte(data), &update); err == nil {
+				// Write to DB using portal's task ID
+				if update.Status != "" {
+					r.updateTaskStatus(portalTaskID, string(update.Status))
+				}
+				if update.Message != nil && update.Message.Content != "" {
+					r.appendMessage(portalTaskID, *update.Message)
+				}
+				// Broadcast to frontend using portal's task ID
+				update.TaskID = portalTaskID
+				r.broadcastTaskUpdate(portalTaskID, &update)
+				if update.Status == a2a.TaskStatusCompleted || update.Status == a2a.TaskStatusFailed {
+					log.Printf("[A2A Relay] Task finished: portalTask=%s status=%s", portalTaskID, update.Status)
+					return
+				}
+			}
+		}
+	}
 }

@@ -304,19 +304,29 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		json.Unmarshal([]byte(config.A2APeersJSON), &peers)
 	}
 
-	// For Docker agents, we always derive the endpoint from the AgentID
-	for i := range peers {
-		// Assume internal Docker hostname: http://<AgentID>:<port>
-		peers[i].Endpoint = fmt.Sprintf("http://bot-portal-agent-%s:%s", peers[i].ID, gatewayPort)
-	}
-
-	// Always add portal as a peer so the agent recognizes portal's bearer token
-	// Use host.docker.internal to allow agent to reach portal from inside container
+	// Route ALL peer communication through the portal (hub-and-spoke model).
+	// Instead of giving agents direct Docker endpoints to peers, every peer's
+	// endpoint points to the portal. This way:
+	//   1. Portal logs every inter-agent message in task_logs (observable in UI)
+	//   2. Portal forwards the task to the actual recipient agent
+	//   3. Portal relays SSE responses back
+	//
+	// The agent's a2a_send tool POSTs to peer.endpoint/tasks with the peer ID
+	// in the message. The portal uses X-Agent-ID header to identify the sender
+	// and routes to the correct recipient.
 	portalEndpoint := config.PortalURL
 	if portalEndpoint == "" {
-		// Default to host.docker.internal if not specified
 		portalEndpoint = "http://host.docker.internal:8080"
 	}
+	for i := range peers {
+		// All peers route through the portal's relay endpoint.
+		// ZeroClaw a2a_send does POST {endpoint}/tasks, so this becomes:
+		//   POST http://portal:8080/a2a/relay/{peerID}/tasks
+		// The portal extracts recipientID from the URL, logs the message, and forwards it.
+		peers[i].Endpoint = fmt.Sprintf("%s/a2a/relay/%s", portalEndpoint, peers[i].ID)
+	}
+
+	// Also add portal itself as a peer so the agent recognizes portal's bearer token
 	peers = append(peers, A2APeer{
 		ID:          "portal",
 		Endpoint:    portalEndpoint,

@@ -220,7 +220,7 @@ func buildDefaultAgentsMD(agentID string, peers []peerEntry) string {
 	sb.WriteString("```\n")
 	sb.WriteString("a2a_send(to: \"<peer-id>\", message: \"Your message here\")\n")
 	sb.WriteString("```\n\n")
-	sb.WriteString("Messages are delivered asynchronously via the A2A protocol. ")
+	sb.WriteString("Messages are routed through the portal, which logs and forwards them. ")
 	sb.WriteString("Responses will arrive through your A2A channel automatically.\n\n")
 
 	if len(peers) > 0 {
