@@ -107,7 +107,7 @@ func (h *Handler) regenerateAgentConfig(agent *store.Agent) error {
 		}
 		a2aPeers = append(a2aPeers, docker.A2APeer{
 			ID:          peerID,
-			BearerToken: peerAgent.BearerToken,
+			BearerToken: agent.BearerToken,
 		})
 	}
 	a2aPeersJSON, _ := json.Marshal(a2aPeers)

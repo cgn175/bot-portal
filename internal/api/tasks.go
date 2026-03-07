@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
+	"github.com/zeroclaw/bot-portal/internal/models"
 	"github.com/zeroclaw/bot-portal/internal/store"
 )
 
@@ -158,7 +159,34 @@ func (r *Router) createTask(channelID, senderID, recipientID string, message a2a
 	return r.createTaskWithID(id, channelID, senderID, recipientID, message)
 }
 
+// ensureChannel creates the channel row if it doesn't exist yet,
+// so the Messages page can list it.
+func (r *Router) ensureChannel(channelID, senderID, recipientID string) {
+	existing, _ := r.channelStore.GetByID(channelID)
+	if existing != nil {
+		return
+	}
+	members := []string{}
+	if senderID != "" {
+		members = append(members, senderID)
+	}
+	if recipientID != "" && recipientID != senderID {
+		members = append(members, recipientID)
+	}
+	ch := &models.Channel{
+		ID:        channelID,
+		Members:   members,
+		CreatedAt: time.Now(),
+	}
+	if err := r.channelStore.Create(ch); err != nil {
+		log.Printf("Warning: failed to ensure channel %s: %v", channelID, err)
+	}
+}
+
 func (r *Router) createTaskWithID(id, channelID, senderID, recipientID string, message a2a.TaskMessage) (string, error) {
+	// Ensure the channel exists so it shows up in the Messages page
+	r.ensureChannel(channelID, senderID, recipientID)
+
 	taskLog := &store.TaskLog{
 		ID:          id,
 		ChannelID:   channelID,

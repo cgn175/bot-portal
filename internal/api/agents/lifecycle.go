@@ -100,9 +100,12 @@ func (h *Handler) doStartAgent(agentID string) error {
 				log.Printf("Skipping peer %s: not found", peerID)
 				continue
 			}
+			// Use the SENDER's (current agent's) bearer token, not the peer's.
+			// The portal relay identifies the sender by looking up the bearer token.
+			_ = peerAgent // validate peer exists
 			a2aPeers = append(a2aPeers, docker.A2APeer{
 				ID:          peerID,
-				BearerToken: peerAgent.BearerToken,
+				BearerToken: agent.BearerToken,
 			})
 		}
 		a2aPeersJSON, _ := json.Marshal(a2aPeers)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -27,9 +28,18 @@ func (r *Router) handleChannelDetail(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	channelID := path[len("/api/channels/"):]
+	remainder := path[len("/api/channels/"):]
 
-	// Check if this is a messages request
+	// Check if this is a messages request: /api/channels/{id}/messages
+	if strings.HasSuffix(remainder, "/messages") {
+		channelID := strings.TrimSuffix(remainder, "/messages")
+		r.getChannelMessages(w, req, channelID)
+		return
+	}
+
+	channelID := remainder
+
+	// Also support query param: /api/channels/{id}?messages=true
 	if req.URL.Query().Get("messages") == "true" {
 		r.getChannelMessages(w, req, channelID)
 		return
