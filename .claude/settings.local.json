@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git check-ignore:*)",
+      "Bash(git worktree:*)",
+      "Bash(go mod:*)",
+      "Bash(go test:*)",
+      "Bash(go doc:*)",
+      "Bash(go build:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

@@ -69,10 +69,8 @@ export default function AgentChat({ agentId, agentToken }: AgentChatProps) {
     const history: Message[] = []
     const seenContents = new Set<string>()
 
-    // Sort logs by created_at ascending
-    const sortedLogs = [...logs].sort((a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
+    // Sort logs by created_at ascending (api returns descending by default)
+    const sortedLogs = [...logs].reverse()
 
     sortedLogs.forEach((log: TaskLog) => {
       if (log.messages) {

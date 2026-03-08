@@ -390,7 +390,8 @@ function ChannelDetailsPanel({ channel, messages, onBack }: {
 function flattenMessages(taskLogs: TaskLog[]): BubbleData[] {
   const bubbles: BubbleData[] = []
 
-  for (const log of taskLogs) {
+  const sortedLogs = [...taskLogs].reverse()
+  for (const log of sortedLogs) {
     if (log.messages && log.messages.length > 0) {
       for (const m of log.messages) {
         bubbles.push({
