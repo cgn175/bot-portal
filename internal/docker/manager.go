@@ -486,8 +486,8 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 	// but Binds is usually fine if the host path exists.
 	hostConfig := &container.HostConfig{
 		NetworkMode:     container.NetworkMode(selectedNetwork),
+		ExtraHosts:      []string{"host.docker.internal:host-gateway"},
 		PortBindings:    portBindings,
-		AutoRemove:      false,
 		PublishAllPorts: false,
 		Mounts: []mount.Mount{
 			{
