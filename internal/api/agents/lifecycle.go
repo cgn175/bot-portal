@@ -127,8 +127,17 @@ func (h *Handler) doStartAgent(agentID string) error {
 				return fmt.Errorf("failed to fetch model config: %w", err)
 			}
 			if model != nil {
+				var modelProvider string
+				if model.AuthConfigID != "" {
+					if auth, err := h.AuthConfigStore.GetByID(model.AuthConfigID); err == nil && auth != nil {
+						modelProvider = auth.Provider
+						if auth.AuthType == "github_copilot_oauth" {
+							modelProvider = "copilot"
+						}
+					}
+				}
 				modelConfig := &docker.ModelConfig{
-					Provider: model.Provider,
+					Provider: modelProvider,
 					Name:     model.ModelIdentifier,
 					Endpoint: model.EndpointURL,
 				}

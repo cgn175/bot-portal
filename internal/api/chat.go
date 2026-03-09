@@ -147,7 +147,7 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 // request to an upstream LLM provider. It resolves auth, builds the payload,
 // makes the request (with Copilot token refresh retry), and writes the response.
 func (r *Router) proxyChatCompletion(w http.ResponseWriter, opts chatProxyOptions) {
-	token, baseURL, copilotAuth, err := r.resolveAuthForModel(opts.model)
+	token, baseURL, providerID, copilotAuth, err := r.resolveAuthForModel(opts.model)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -193,11 +193,11 @@ func (r *Router) proxyChatCompletion(w http.ResponseWriter, opts chatProxyOption
 		return
 	}
 
-	authHeaderName, authHeaderValue := provider.GetAuthHeader(opts.model.Provider, token)
+	authHeaderName, authHeaderValue := provider.GetAuthHeader(providerID, token)
 	proxyReq.Header.Set(authHeaderName, authHeaderValue)
 	proxyReq.Header.Set("Content-Type", "application/json")
 	proxyReq.Header.Set("Accept", acceptHeader)
-	applyProviderHeaders(proxyReq, opts.model.Provider, baseURL)
+	applyProviderHeaders(proxyReq, providerID, baseURL)
 
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(proxyReq)
@@ -213,11 +213,11 @@ func (r *Router) proxyChatCompletion(w http.ResponseWriter, opts chatProxyOption
 		if err := json.Unmarshal([]byte(copilotAuth.Credentials), &creds); err == nil {
 			if newToken, err := r.refreshCopilotToken(copilotAuth, creds["access_token"]); err == nil {
 				retryReq, _ := http.NewRequest(http.MethodPost, endpointURL, bytes.NewReader(payloadBytes))
-				h, v := provider.GetAuthHeader(opts.model.Provider, newToken)
+				h, v := provider.GetAuthHeader(providerID, newToken)
 				retryReq.Header.Set(h, v)
 				retryReq.Header.Set("Content-Type", "application/json")
 				retryReq.Header.Set("Accept", acceptHeader)
-				applyProviderHeaders(retryReq, opts.model.Provider, baseURL)
+				applyProviderHeaders(retryReq, providerID, baseURL)
 
 				if retryResp, err := client.Do(retryReq); err == nil {
 					resp = retryResp

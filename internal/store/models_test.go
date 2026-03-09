@@ -27,7 +27,7 @@ func TestModelStore_CreateAndGet(t *testing.T) {
 	model := &models.Model{
 		ID:              "test-model-1",
 		Name:            "Test GPT Model",
-		Provider:        "openai",
+		AuthConfigID:    "test-auth-config",
 		ModelIdentifier: "gpt-4",
 		EndpointURL:     "https://api.openai.com/v1/chat/completions",
 		DefaultParams:   `{"temperature": 0.7, "max_tokens": 1000}`,
@@ -59,8 +59,8 @@ func TestModelStore_CreateAndGet(t *testing.T) {
 		t.Errorf("Expected Name %s, got %s", model.Name, retrieved.Name)
 	}
 
-	if retrieved.Provider != model.Provider {
-		t.Errorf("Expected Provider %s, got %s", model.Provider, retrieved.Provider)
+	if retrieved.AuthConfigID != model.AuthConfigID {
+		t.Errorf("Expected AuthConfigID %s, got %s", model.AuthConfigID, retrieved.AuthConfigID)
 	}
 
 	if retrieved.ModelIdentifier != model.ModelIdentifier {

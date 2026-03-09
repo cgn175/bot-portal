@@ -269,13 +269,9 @@ func (r *Router) deleteAuthConfig(w http.ResponseWriter, req *http.Request, conf
 		return
 	}
 
-	// Delete all models associated with this provider
-	provider := config.Provider
-	if config.AuthType == "github_copilot_oauth" {
-		provider = "copilot"
-	}
-	if err := r.modelStore.DeleteByProvider(provider); err != nil {
-		log.Printf("[delete-auth-config] failed to delete models for provider %s: %v", provider, err)
+	// Delete all models associated with this auth config
+	if err := r.modelStore.DeleteByAuthConfigID(configID); err != nil {
+		log.Printf("[delete-auth-config] failed to delete models for auth config %s: %v", configID, err)
 		// Continue with deleting the auth config even if model deletion fails
 	}
 
@@ -469,16 +465,19 @@ func (r *Router) discoverAndSaveModels(config *models.AuthConfig) {
 			name = m.ID
 		}
 		model := &models.Model{
-			ID:              m.ID,
+			ID:              fmt.Sprintf("%s:%s", config.ID, m.ID),
 			Name:            name,
-			Provider:        providerID,
+			AuthConfigID:    config.ID,
 			ModelIdentifier: m.ID,
 			EndpointURL:     baseURL,
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		}
 		if err := r.modelStore.Create(model); err != nil {
-			// Skip duplicates silently
+			// Skip duplicates silently, log others
+			if !strings.Contains(err.Error(), "UNIQUE constraint failed") && !strings.Contains(err.Error(), "already exists") {
+				log.Printf("[model-discovery] failed to save model %s: %v", m.ID, err)
+			}
 			continue
 		}
 		saved++

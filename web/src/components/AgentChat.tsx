@@ -70,6 +70,7 @@ export default function AgentChat({ agentId, agentToken }: AgentChatProps) {
     const seenContents = new Set<string>()
 
     // Sort logs by created_at ascending (api returns descending by default)
+    if (!logs) return []
     const sortedLogs = [...logs].reverse()
 
     sortedLogs.forEach((log: TaskLog) => {

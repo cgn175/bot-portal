@@ -13,7 +13,7 @@ export default function AgentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { agents, loading, refreshAgents } = useAgents()
-  const agent = agents.find(a => a.id === id)
+  const agent = agents?.find(a => a.id === id)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [pinging, setPinging] = useState(false)
@@ -128,8 +128,8 @@ export default function AgentDetail() {
   }
 
   const isDocker = agent.agentType === 'docker'
-  const selectedModel = models.find(m => m.id === agent.modelId)
-  const selectedAuth = authConfigs.find(c => c.id === agent.authConfigId)
+  const selectedModel = models?.find(m => m.id === agent.modelId)
+  const selectedAuth = authConfigs?.find(c => c.id === agent.authConfigId)
 
   return (
     <div>

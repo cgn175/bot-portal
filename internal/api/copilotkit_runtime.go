@@ -21,9 +21,9 @@ func (r *Router) handleCopilotKitInfo(w http.ResponseWriter, req *http.Request) 
 	availableModels := make([]map[string]string, 0, len(modelsList))
 	for _, m := range modelsList {
 		availableModels = append(availableModels, map[string]string{
-			"id":       m.ID,
-			"name":     m.Name,
-			"provider": m.Provider,
+			"id":           m.ID,
+			"name":         m.Name,
+			"authConfigId": m.AuthConfigID,
 		})
 	}
 
@@ -56,50 +56,54 @@ func (r *Router) resolveModel(requestedModel string) (*models.Model, error) {
 	return nil, fmt.Errorf("no models configured. Add a model in Settings → Models first")
 }
 
-// resolveAuthForModel finds the auth config and token for a given model's provider.
-func (r *Router) resolveAuthForModel(model *models.Model) (token string, baseURL string, copilotAuth *models.AuthConfig, err error) {
-	authConfigs, err := r.authConfigStore.List()
-	if err != nil {
-		return "", "", nil, fmt.Errorf("failed to get auth configs: %v", err)
+// resolveAuthForModel finds the auth config and token for a given model's auth config ID.
+func (r *Router) resolveAuthForModel(model *models.Model) (token string, baseURL string, providerID string, copilotAuth *models.AuthConfig, err error) {
+	if model.AuthConfigID == "" {
+		return "", "", "", nil, fmt.Errorf("model %q has no auth config assigned. Edit it in Settings → Models", model.ID)
 	}
 
-	for _, auth := range authConfigs {
-		if auth.Provider == model.Provider || (model.Provider == "copilot" && auth.AuthType == "github_copilot_oauth") {
-			baseURL = auth.EndpointURL
+	auth, err := r.authConfigStore.GetByID(model.AuthConfigID)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to get auth config: %v", err)
+	}
+	if auth == nil {
+		return "", "", "", nil, fmt.Errorf("auth config %q not found for model %q", model.AuthConfigID, model.ID)
+	}
 
-			if auth.AuthType == "github_copilot_oauth" {
-				copilotAuth = auth
-				var refreshErr error
-				token, refreshErr = r.ensureFreshCopilotToken(auth)
-				if refreshErr != nil {
-					var creds map[string]string
-					if jsonErr := json.Unmarshal([]byte(auth.Credentials), &creds); jsonErr == nil {
-						token = creds["copilot_api_key"]
-						if token == "" {
-							token = creds["access_token"]
-						}
-					}
+	baseURL = auth.EndpointURL
+	providerID = auth.Provider
+
+	if auth.AuthType == "github_copilot_oauth" {
+		copilotAuth = auth
+		providerID = "copilot"
+		var refreshErr error
+		token, refreshErr = r.ensureFreshCopilotToken(auth)
+		if refreshErr != nil {
+			var creds map[string]string
+			if jsonErr := json.Unmarshal([]byte(auth.Credentials), &creds); jsonErr == nil {
+				token = creds["copilot_api_key"]
+				if token == "" {
+					token = creds["access_token"]
 				}
-				if baseURL == "" {
-					baseURL = "https://api.githubcopilot.com"
-				}
-			} else {
-				var creds map[string]string
-				if jsonErr := json.Unmarshal([]byte(auth.Credentials), &creds); jsonErr != nil {
-					continue
-				}
-				token = creds["api_key"]
-				baseURL = strings.TrimRight(auth.EndpointURL, "/")
 			}
-			break
 		}
+		if baseURL == "" {
+			baseURL = "https://api.githubcopilot.com"
+		}
+	} else {
+		var creds map[string]string
+		if jsonErr := json.Unmarshal([]byte(auth.Credentials), &creds); jsonErr != nil {
+			return "", "", "", nil, fmt.Errorf("failed to parse auth credentials: %v", jsonErr)
+		}
+		token = creds["api_key"]
+		baseURL = strings.TrimRight(auth.EndpointURL, "/")
 	}
 
 	if token == "" {
-		return "", "", nil, fmt.Errorf("no auth config found for provider %q. Add one in Settings → Auth", model.Provider)
+		return "", "", "", nil, fmt.Errorf("no auth token found in auth config %q. Check credentials in Settings → Auth", model.AuthConfigID)
 	}
 
-	return token, baseURL, copilotAuth, nil
+	return token, baseURL, providerID, copilotAuth, nil
 }
 
 // ============================================================================

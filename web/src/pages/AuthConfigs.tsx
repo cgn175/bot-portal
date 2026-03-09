@@ -56,7 +56,7 @@ export default function AuthConfigs() {
     setEditingConfig(undefined)
   }, [])
 
-  if (loading && (!configs || configs.length === 0)) {
+  if (loading && (!configs || configs?.length === 0)) {
     return (
       <div>
         <div className="page-header">
@@ -118,7 +118,7 @@ export default function AuthConfigs() {
               </tr>
             </thead>
             <tbody>
-              {configs.map((config) => (
+              {configs?.map((config) => (
                 <tr key={config.id}>
                   <td>
                     <code>{config.id}</code>

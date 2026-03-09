@@ -22,9 +22,9 @@ export function useModelActions() {
         required: true,
       },
       {
-        name: "provider",
+        name: "authConfigId",
         type: "string",
-        description: 'Provider ID (e.g., "openai", "anthropic", "kimi")',
+        description: 'ID of the auth configuration to associate with this model',
         required: true,
       },
       {
@@ -41,11 +41,11 @@ export function useModelActions() {
         required: false,
       },
     ],
-    handler: async ({ id, name, provider, modelName, baseUrl }) => {
+    handler: async ({ id, name, authConfigId, modelName, baseUrl }) => {
       await api.createModel({
         id,
         name,
-        provider,
+        authConfigId,
         modelName,
         baseUrl,
         isDefault: false,

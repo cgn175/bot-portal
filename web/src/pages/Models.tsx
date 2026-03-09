@@ -57,6 +57,16 @@ export default function Models() {
     }
   }, [fetchData])
 
+  const handleDeleteAll = useCallback(async () => {
+    if (!confirm('Are you sure you want to delete ALL models? This action cannot be undone.')) return
+    try {
+      await api.deleteAllModels()
+      fetchData()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to delete all models')
+    }
+  }, [fetchData])
+
   const handleCancel = useCallback(() => {
     setShowForm(false)
     setEditingModel(undefined)
@@ -81,7 +91,7 @@ export default function Models() {
     }
   }, [authConfigs, fetchData])
 
-  if (loading && (!models || models.length === 0)) {
+  if (loading && (!models || models?.length === 0)) {
     return (
       <div>
         <div className="page-header">
@@ -111,6 +121,14 @@ export default function Models() {
               {syncing ? 'Syncing...' : '↻ Sync from Providers'}
             </button>
           )}
+          {models?.length > 0 && (
+            <button
+              className="btn btn-danger"
+              onClick={handleDeleteAll}
+            >
+              Delete All
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => setShowForm(true)}>
             <span>+</span>
             <span>Add Model</span>
@@ -129,18 +147,18 @@ export default function Models() {
           {actionError}
         </Alert>
       )}
-
-      {!models || models.length === 0 ? (
+ 
+      {(!models || (models?.length ?? 0) === 0) ? (
         <EmptyState
           icon="🧠"
           title="No models configured yet"
           description={
-            authConfigs?.length > 0
+            (authConfigs?.length ?? 0) > 0
               ? 'Models will be auto-discovered when you add an auth provider. Click "Sync from Providers" to refresh.'
               : 'Set up an auth provider first — models will be auto-discovered, or add one manually.'
           }
           action={
-            authConfigs?.length > 0 ? (
+            (authConfigs?.length ?? 0) > 0 ? (
               <button className="btn btn-primary" onClick={handleSync} disabled={syncing}>
                 {syncing ? 'Syncing...' : 'Sync from Providers'}
               </button>
@@ -164,36 +182,43 @@ export default function Models() {
               </tr>
             </thead>
             <tbody>
-              {models.map((model) => (
-                <tr key={model.id}>
-                  <td>
-                    <code>{model.id}</code>
-                  </td>
-                  <td>{model.name}</td>
-                  <td>
-                    <ProviderBadge provider={model.provider} />
-                  </td>
-                  <td>
-                    <code>{model.modelIdentifier}</code>
-                  </td>
-                  <td>
-                    <div className="action-buttons">
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => handleEdit(model)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDelete(model.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {models?.map((model) => {
+                const config = authConfigs?.find(c => c.id === model.authConfigId)
+                const provider = config 
+                  ? (config.authType === 'github_copilot_oauth' ? 'copilot' : config.provider) 
+                  : 'unknown'
+                
+                return (
+                  <tr key={model.id}>
+                    <td>
+                      <code>{model.id}</code>
+                    </td>
+                    <td>{model.name}</td>
+                    <td>
+                      <ProviderBadge provider={provider} />
+                    </td>
+                    <td>
+                      <code>{model.modelIdentifier}</code>
+                    </td>
+                    <td>
+                      <div className="action-buttons">
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => handleEdit(model)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDelete(model.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

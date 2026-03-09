@@ -37,7 +37,7 @@ export default function TestChat() {
       ])
       setModels(modelsData || [])
       setAuthConfigs(authData || [])
-      if (modelsData.length > 0 && !selectedModel) {
+      if ((modelsData?.length ?? 0) > 0 && !selectedModel) {
         setSelectedModel(modelsData[0].id)
       }
     } catch (err) {
@@ -141,29 +141,35 @@ export default function TestChat() {
             }}
           >
             <option value="">Select a model...</option>
-            {models.map(model => (
-              <option key={model.id} value={model.id}>
-                {model.name} ({model.provider})
-              </option>
-            ))}
+            {models?.map(model => {
+              const config = authConfigs?.find(c => c.id === model.authConfigId)
+              const provider = config 
+                ? (config.authType === 'github_copilot_oauth' ? 'copilot' : config.provider) 
+                : 'unknown'
+              return (
+                <option key={model.id} value={model.id}>
+                  {model.name} ({provider})
+                </option>
+              )
+            })}
           </select>
           <button
             onClick={clearChat}
             className="btn btn-secondary"
-            disabled={messages.length === 0}
+            disabled={(messages?.length ?? 0) === 0}
           >
             Clear Chat
           </button>
         </div>
       </div>
 
-      {authConfigs.length === 0 && (
+      {(authConfigs?.length ?? 0) === 0 && (
         <Alert type="warning">
           No auth configs found. Please <a href="#/auth-configs">add an auth config</a> first.
         </Alert>
       )}
 
-      {models.length === 0 && (
+      {(models?.length ?? 0) === 0 && (
         <Alert type="warning">
           No models found. Please <a href="#/models">add a model</a> first.
         </Alert>
@@ -200,7 +206,7 @@ export default function TestChat() {
             gap: '1rem'
           }}
         >
-          {messages.length === 0 ? (
+          {(messages?.length ?? 0) === 0 ? (
             <div
               style={{
                 textAlign: 'center',
@@ -222,7 +228,7 @@ export default function TestChat() {
               </p>
             </div>
           ) : (
-            messages.map((message) => (
+            messages?.map((message) => (
               <div
                 key={message.id}
                 className={`message ${message.role}`}

@@ -12,7 +12,7 @@ export function useAgentsContext() {
 
   useCopilotReadable({
     description: 'List of AI agents in Bot Portal with their status, type, and configuration',
-    value: agents.map(agent => ({
+    value: agents?.map(agent => ({
       id: agent.id,
       name: agent.name,
       description: agent.description,
@@ -22,7 +22,7 @@ export function useAgentsContext() {
       authConfigId: agent.authConfigId,
       endpoint: agent.endpoint,
       image: agent.image,
-    })),
+    })) || [],
   });
 }
 
@@ -38,13 +38,13 @@ export function useModelsContext() {
 
   useCopilotReadable({
     description: 'List of AI models configured in Bot Portal with provider and model identifier',
-    value: models.map(model => ({
+    value: models?.map(model => ({
       id: model.id,
       name: model.name,
-      provider: model.provider,
+      authConfigId: model.authConfigId,
       modelIdentifier: model.modelIdentifier,
       endpointUrl: model.endpointUrl,
-    })),
+    })) || [],
   });
 }
 
@@ -60,12 +60,12 @@ export function useAuthConfigsContext() {
 
   useCopilotReadable({
     description: 'List of authentication configurations with provider and auth type',
-    value: authConfigs.map(config => ({
+    value: authConfigs?.map(config => ({
       id: config.id,
       name: config.name,
       provider: config.provider,
       authType: config.authType,
-    })),
+    })) || [],
   });
 }
 
@@ -81,12 +81,12 @@ export function useProvidersContext() {
 
   useCopilotReadable({
     description: 'List of available AI providers that can be configured',
-    value: providers.map(provider => ({
+    value: providers?.map(provider => ({
       id: provider.id,
       name: provider.name,
       authType: provider.authType,
       defaultUrl: provider.defaultUrl,
       description: provider.description,
-    })),
+    })) || [],
   });
 }

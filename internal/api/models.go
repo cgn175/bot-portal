@@ -19,6 +19,8 @@ func (r *Router) handleModels(w http.ResponseWriter, req *http.Request) {
 		r.listModels(w, req)
 	case http.MethodPost:
 		r.createModel(w, req)
+	case http.MethodDelete:
+		r.deleteAllModels(w, req)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -60,7 +62,7 @@ func (r *Router) createModel(w http.ResponseWriter, req *http.Request) {
 	var requestModel struct {
 		ID           string                 `json:"id"`
 		Name         string                 `json:"name"`
-		Provider     string                 `json:"provider"`
+		AuthConfigID string                 `json:"authConfigId"`
 		ModelName    string                 `json:"modelName"`
 		APIKeyConfig map[string]interface{} `json:"apiKeyConfig"`
 		BaseURL      string                 `json:"baseUrl"`
@@ -75,7 +77,7 @@ func (r *Router) createModel(w http.ResponseWriter, req *http.Request) {
 	model := &models.Model{
 		ID:              requestModel.ID,
 		Name:            requestModel.Name,
-		Provider:        requestModel.Provider,
+		AuthConfigID:    requestModel.AuthConfigID,
 		ModelIdentifier: requestModel.ModelName,
 		EndpointURL:     requestModel.BaseURL,
 		DefaultParams:   "", // Convert APIKeyConfig appropriately
@@ -135,12 +137,11 @@ func (r *Router) updateModel(w http.ResponseWriter, req *http.Request, modelID s
 		return
 	}
 
-	// Apply updates
 	if name, ok := updates["name"].(string); ok {
 		model.Name = name
 	}
-	if provider, ok := updates["provider"].(string); ok {
-		model.Provider = provider
+	if authConfigID, ok := updates["authConfigId"].(string); ok {
+		model.AuthConfigID = authConfigID
 	}
 	if modelName, ok := updates["modelName"].(string); ok {
 		model.ModelIdentifier = modelName
@@ -194,6 +195,15 @@ func (r *Router) deleteModel(w http.ResponseWriter, req *http.Request, modelID s
 			http.Error(w, "Model not found", http.StatusNotFound)
 			return
 		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (r *Router) deleteAllModels(w http.ResponseWriter, req *http.Request) {
+	if err := r.modelStore.DeleteAll(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

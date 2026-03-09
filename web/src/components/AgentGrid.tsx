@@ -10,7 +10,7 @@ interface AgentGridProps {
 }
 
 function AgentGrid({ agents, onDelete, onAction }: AgentGridProps) {
-  if (agents.length === 0) {
+  if ((agents?.length ?? 0) === 0) {
     return (
       <EmptyState
         icon="🤖"
@@ -22,7 +22,7 @@ function AgentGrid({ agents, onDelete, onAction }: AgentGridProps) {
 
   return (
     <div className="grid grid-auto">
-      {agents.map((agent, index) => (
+      {agents?.map((agent, index) => (
         <div
           key={agent.id}
           className={`animate-fade-in stagger-${Math.min(index + 1, 5)}`}

@@ -116,7 +116,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
     )
   }
 
-  if (authConfigs.length === 0 && !agent) {
+  if ((authConfigs?.length ?? 0) === 0 && !agent) {
     return (
       <Modal isOpen={true} onClose={onCancel} title="Auth Provider Required" size="md">
         <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -139,17 +139,8 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
   }
 
   // Filter models by selected auth config
-  const selectedConfig = authConfigs.find(c => c.id === formData.authConfigId)
-  const filteredModels = selectedConfig
-    ? models.filter(m => {
-        // Match by endpoint URL (most reliable — both set during auto-discovery)
-        if (selectedConfig.endpointUrl && m.endpointUrl) {
-          return m.endpointUrl === selectedConfig.endpointUrl
-        }
-        // Fallback: match by provider
-        const configProvider = selectedConfig.authType === 'github_copilot_oauth' ? 'copilot' : selectedConfig.provider
-        return m.provider === configProvider
-      })
+  const filteredModels = formData.authConfigId
+    ? models?.filter(m => m.authConfigId === formData.authConfigId)
     : models
 
   return (
@@ -275,7 +266,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             }}
           >
             <option value="">— Select provider —</option>
-            {authConfigs.map(c => (
+            {authConfigs?.map(c => (
               <option key={c.id} value={c.id}>
                 {c.name} ({c.authType === 'github_copilot_oauth' ? 'GitHub Copilot' : 'Custom'})
               </option>
@@ -294,7 +285,7 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             disabled={!formData.authConfigId}
           >
             <option value="">{formData.authConfigId ? '— Select model —' : '— Select a provider first —'}</option>
-            {filteredModels.map(m => (
+            {filteredModels?.map(m => (
               <option key={m.id} value={m.id}>
                 {m.name} ({m.modelIdentifier})
               </option>
@@ -317,12 +308,12 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
             overflowY: 'auto',
             background: 'var(--color-bg-secondary, var(--color-bg))'
           }}>
-            {allAgents.filter(a => a.id !== formData.id).length === 0 ? (
+            {allAgents?.filter(a => a.id !== formData.id).length === 0 ? (
               <div style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
                 No other agents available
               </div>
             ) : (
-              allAgents.filter(a => a.id !== formData.id).map(a => (
+              allAgents?.filter(a => a.id !== formData.id).map(a => (
                 <label
                   key={a.id}
                   style={{

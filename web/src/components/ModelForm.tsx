@@ -18,7 +18,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
   const [formData, setFormData] = useState<CreateModelRequest>({
     id: '',
     name: '',
-    provider: '',
+    authConfigId: '',
     modelName: '',
     baseUrl: '',
     apiKeyConfig: {},
@@ -39,12 +39,13 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
       setFormData({
         id: model.id,
         name: model.name,
-        provider: model.provider,
+        authConfigId: model.authConfigId,
         modelName: model.modelIdentifier,
         baseUrl: model.endpointUrl || '',
         apiKeyConfig: {},
         isDefault: model.isDefault || false,
       })
+      setSelectedAuthConfig(model.authConfigId)
 
       if (model.defaultParams) {
         try {
@@ -62,11 +63,10 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
     setAvailableModels([])
     if (!configId) return
 
-    const config = authConfigs.find(c => c.id === configId)
+    const config = authConfigs?.find(c => c.id === configId)
     if (!config) return
 
-    const provider = config.authType === 'github_copilot_oauth' ? 'copilot' : config.provider
-    setFormData(prev => ({ ...prev, provider, baseUrl: config.endpointUrl || '' }))
+    setFormData(prev => ({ ...prev, authConfigId: configId, baseUrl: config.endpointUrl || '' }))
   }
 
   const handleBrowseModels = async () => {
@@ -142,16 +142,19 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
       {error && <Alert type="error" onClose={() => setError('')}>{error}</Alert>}
 
       <form id="model-form" onSubmit={handleSubmit}>
-        {!model && authConfigs.length > 0 && (
-          <div className="form-group">
-            <label htmlFor="authConfig">Auth Provider</label>
-            <select id="authConfig" value={selectedAuthConfig} onChange={e => handleAuthConfigChange(e.target.value)}>
-              <option value="">— Select to auto-fill —</option>
-              {authConfigs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <small>Select a provider to auto-fill endpoint and discover models</small>
-          </div>
-        )}
+        <div className="form-group">
+          <label htmlFor="authConfig">Auth Provider *</label>
+          <select 
+            id="authConfig" 
+            required
+            value={formData.authConfigId} 
+            onChange={e => handleAuthConfigChange(e.target.value)}
+          >
+            <option value="">— Select Auth Config —</option>
+            {authConfigs?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <small>The authentication configuration that owns this model</small>
+        </div>
 
         <div className="form-group">
           <label htmlFor="modelName">Model Identifier *</label>
@@ -171,7 +174,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
               </button>
             )}
           </div>
-          {availableModels.length > 0 && (
+          {(availableModels?.length ?? 0) > 0 && (
             <div style={{
               marginTop: '0.5rem',
               maxHeight: '200px',
@@ -180,7 +183,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
               borderRadius: 'var(--radius-md)',
               background: 'var(--color-bg)'
             }}>
-              {availableModels.map(m => (
+              {availableModels?.map(m => (
                 <button
                   key={m.id}
                   type="button"
@@ -236,18 +239,7 @@ export default function ModelForm({ model, onSuccess, onCancel }: ModelFormProps
           <small>Human-readable display name</small>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="provider">Provider *</label>
-          <input
-            id="provider"
-            type="text"
-            required
-            value={formData.provider}
-            onChange={e => setFormData({ ...formData, provider: e.target.value })}
-            placeholder="openai"
-          />
-          <small>Provider name (auto-filled from auth config)</small>
-        </div>
+
 
         <div className="form-group">
           <label htmlFor="baseUrl">Endpoint URL (Optional)</label>

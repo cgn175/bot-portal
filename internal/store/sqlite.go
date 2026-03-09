@@ -23,6 +23,31 @@ func NewSQLite(path string) (*sql.DB, error) {
 
 // RunMigrations runs database migrations
 func RunMigrations(db *sql.DB) error {
+	// One-time migration: if models table has 'provider' column, drop it to recreate with new schema
+	// This is safe because models are auto-discovered from auth configs.
+	var hasProvider bool
+	rows, err := db.Query("PRAGMA table_info(models)")
+	if err == nil {
+		for rows.Next() {
+			var cid int
+			var name string
+			var dtype string
+			var notnull int
+			var dfltValue interface{}
+			var pk int
+			if err := rows.Scan(&cid, &name, &dtype, &notnull, &dfltValue, &pk); err == nil {
+				if name == "provider" {
+					hasProvider = true
+				}
+			}
+		}
+		rows.Close()
+	}
+	if hasProvider {
+		fmt.Println("[migration] dropping models table to remove legacy provider column")
+		_, _ = db.Exec("DROP TABLE models")
+	}
+
 	migrations := []string{
 		`CREATE TABLE IF NOT EXISTS agents (
 			id TEXT PRIMARY KEY,
@@ -60,10 +85,11 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS models (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
-			provider TEXT NOT NULL,
+			auth_config_id TEXT,
 			model_identifier TEXT NOT NULL,
 			endpoint_url TEXT,
 			default_params TEXT,
+			is_default INTEGER DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -108,6 +134,7 @@ func RunMigrations(db *sql.DB) error {
 		{"agents", "model_id", "TEXT"},
 		{"agents", "auth_config_id", "TEXT"},
 		{"models", "is_default", "INTEGER DEFAULT 0"},
+		{"models", "auth_config_id", "TEXT DEFAULT ''"},
 		{"agents", "peer_agent_ids", "TEXT DEFAULT '[]'"},
 	}
 	for _, m := range alterMigrations {

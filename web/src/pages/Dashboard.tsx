@@ -39,7 +39,7 @@ export default function Dashboard() {
     }
   }, [refreshAgents])
 
-  if (loading && agents.length === 0) {
+  if (loading && (agents?.length ?? 0) === 0) {
     return (
       <div>
         <div className="page-header">
@@ -77,7 +77,7 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      {agents.length === 0 ? (
+      {(agents?.length ?? 0) === 0 ? (
         <EmptyState
           icon="🤖"
           title="No agents registered yet"

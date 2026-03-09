@@ -29,7 +29,7 @@ type Agent struct {
 type Model struct {
 	ID              string    `json:"id"`
 	Name            string    `json:"name"`
-	Provider        string    `json:"provider"`
+	AuthConfigID    string    `json:"authConfigId"`
 	ModelIdentifier string    `json:"modelIdentifier"`
 	EndpointURL     string    `json:"endpointUrl,omitempty"`
 	DefaultParams   string    `json:"defaultParams,omitempty"`

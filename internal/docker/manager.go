@@ -501,6 +501,12 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 				Source: fmt.Sprintf("bot-portal-agent-%s-workspace", config.AgentID),
 				Target: ZEROCLAW_WORK_DIR + "/workspace",
 			},
+			{
+				Type:     mount.TypeBind,
+				Source:   "/projects",
+				Target:   ZEROCLAW_WORK_DIR + "/workspace/shared/projects",
+				ReadOnly: false,
+			},
 		},
 	}
 

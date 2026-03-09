@@ -21,13 +21,13 @@ func NewModelStore(db *sql.DB) *ModelStore {
 // Create inserts a new model into the database
 func (s *ModelStore) Create(model *models.Model) error {
 	query := `
-		INSERT INTO models (id, name, provider, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at)
+		INSERT INTO models (id, name, auth_config_id, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := s.db.Exec(query,
 		model.ID,
 		model.Name,
-		model.Provider,
+		model.AuthConfigID,
 		model.ModelIdentifier,
 		model.EndpointURL,
 		model.DefaultParams,
@@ -44,19 +44,20 @@ func (s *ModelStore) Create(model *models.Model) error {
 // GetByID retrieves a model by its ID
 func (s *ModelStore) GetByID(id string) (*models.Model, error) {
 	query := `
-		SELECT id, name, provider, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
+		SELECT id, name, auth_config_id, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
 		FROM models
 		WHERE id = ?
 	`
 	row := s.db.QueryRow(query, id)
 
 	var model models.Model
+	var authConfigID sql.NullString
 	var endpointURL, defaultParams sql.NullString
 	var isDefault sql.NullInt64
 	err := row.Scan(
 		&model.ID,
 		&model.Name,
-		&model.Provider,
+		&authConfigID,
 		&model.ModelIdentifier,
 		&endpointURL,
 		&defaultParams,
@@ -72,6 +73,9 @@ func (s *ModelStore) GetByID(id string) (*models.Model, error) {
 	}
 
 	// Handle nullable fields
+	if authConfigID.Valid {
+		model.AuthConfigID = authConfigID.String
+	}
 	if endpointURL.Valid {
 		model.EndpointURL = endpointURL.String
 	}
@@ -88,7 +92,7 @@ func (s *ModelStore) GetByID(id string) (*models.Model, error) {
 // List retrieves all models ordered by created_at DESC
 func (s *ModelStore) List() ([]models.Model, error) {
 	query := `
-		SELECT id, name, provider, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
+		SELECT id, name, auth_config_id, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
 		FROM models
 		ORDER BY created_at DESC
 	`
@@ -101,13 +105,14 @@ func (s *ModelStore) List() ([]models.Model, error) {
 	var modelsSlice []models.Model
 	for rows.Next() {
 		var model models.Model
+		var authConfigID sql.NullString
 		var endpointURL, defaultParams sql.NullString
 		var isDefault sql.NullInt64
 
 		err := rows.Scan(
 			&model.ID,
 			&model.Name,
-			&model.Provider,
+			&authConfigID,
 			&model.ModelIdentifier,
 			&endpointURL,
 			&defaultParams,
@@ -120,6 +125,9 @@ func (s *ModelStore) List() ([]models.Model, error) {
 		}
 
 		// Handle nullable fields
+		if authConfigID.Valid {
+			model.AuthConfigID = authConfigID.String
+		}
 		if endpointURL.Valid {
 			model.EndpointURL = endpointURL.String
 		}
@@ -147,12 +155,12 @@ func (s *ModelStore) Update(model *models.Model) error {
 
 	query := `
 		UPDATE models
-		SET name = ?, provider = ?, model_identifier = ?, endpoint_url = ?, default_params = ?, is_default = ?, updated_at = ?
+		SET name = ?, auth_config_id = ?, model_identifier = ?, endpoint_url = ?, default_params = ?, is_default = ?, updated_at = ?
 		WHERE id = ?
 	`
 	result, err := s.db.Exec(query,
 		model.Name,
-		model.Provider,
+		model.AuthConfigID,
 		model.ModelIdentifier,
 		model.EndpointURL,
 		model.DefaultParams,
@@ -196,12 +204,22 @@ func (s *ModelStore) Delete(id string) error {
 	return nil
 }
 
-// DeleteByProvider removes all models for a given provider
-func (s *ModelStore) DeleteByProvider(provider string) error {
-	query := `DELETE FROM models WHERE provider = ?`
-	_, err := s.db.Exec(query, provider)
+// DeleteByAuthConfigID removes all models for a given auth config ID
+func (s *ModelStore) DeleteByAuthConfigID(authConfigID string) error {
+	query := `DELETE FROM models WHERE auth_config_id = ?`
+	_, err := s.db.Exec(query, authConfigID)
 	if err != nil {
-		return fmt.Errorf("failed to delete models by provider: %w", err)
+		return fmt.Errorf("failed to delete models by auth config ID: %w", err)
+	}
+	return nil
+}
+
+// DeleteAll removes all models from the database
+func (s *ModelStore) DeleteAll() error {
+	query := `DELETE FROM models`
+	_, err := s.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all models: %w", err)
 	}
 	return nil
 }
@@ -211,7 +229,7 @@ func (s *ModelStore) DeleteByProvider(provider string) error {
 func (s *ModelStore) GetDefault() (*models.Model, error) {
 	// First try to find a model flagged as default
 	query := `
-		SELECT id, name, provider, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
+		SELECT id, name, auth_config_id, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
 		FROM models
 		WHERE is_default = 1
 		LIMIT 1
@@ -227,7 +245,7 @@ func (s *ModelStore) GetDefault() (*models.Model, error) {
 
 	// Fallback: return the first model ordered by created_at
 	query = `
-		SELECT id, name, provider, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
+		SELECT id, name, auth_config_id, model_identifier, endpoint_url, default_params, is_default, created_at, updated_at
 		FROM models
 		ORDER BY created_at ASC
 		LIMIT 1
@@ -272,12 +290,13 @@ func (s *ModelStore) SetDefault(id string) error {
 // scanModel scans a single model row including the is_default field.
 func (s *ModelStore) scanModel(row *sql.Row) (*models.Model, error) {
 	var model models.Model
+	var authConfigID sql.NullString
 	var endpointURL, defaultParams sql.NullString
 	var isDefault sql.NullInt64
 	err := row.Scan(
 		&model.ID,
 		&model.Name,
-		&model.Provider,
+		&authConfigID,
 		&model.ModelIdentifier,
 		&endpointURL,
 		&defaultParams,
@@ -287,6 +306,9 @@ func (s *ModelStore) scanModel(row *sql.Row) (*models.Model, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+	if authConfigID.Valid {
+		model.AuthConfigID = authConfigID.String
 	}
 	if endpointURL.Valid {
 		model.EndpointURL = endpointURL.String

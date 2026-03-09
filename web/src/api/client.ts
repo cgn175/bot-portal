@@ -59,7 +59,7 @@ export interface CreateTaskRequest {
 export interface Model {
   id: string
   name: string
-  provider: string
+  authConfigId: string
   modelIdentifier: string
   endpointUrl?: string
   defaultParams?: string
@@ -71,7 +71,7 @@ export interface Model {
 export interface CreateModelRequest {
   id: string
   name: string
-  provider: string
+  authConfigId: string
   modelName: string
   baseUrl?: string
   apiKeyConfig?: Record<string, unknown>,
@@ -301,6 +301,11 @@ class ApiClient {
   async deleteModel(id: string): Promise<void> {
     const res = await fetch(`${API_BASE}/models/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error('Failed to delete model')
+  }
+
+  async deleteAllModels(): Promise<void> {
+    const res = await fetch(`${API_BASE}/models`, { method: 'DELETE' })
+    if (!res.ok) throw new Error('Failed to delete all models')
   }
 
   // ============================================================================

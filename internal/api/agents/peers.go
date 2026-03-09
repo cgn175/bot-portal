@@ -121,8 +121,12 @@ func (h *Handler) regenerateAgentConfig(agent *store.Agent) error {
 	if agent.ModelID != "" {
 		model, err := h.ModelStore.GetByID(agent.ModelID)
 		if err == nil && model != nil {
+			provider := "openai" // fallback
+			if auth, err := h.AuthConfigStore.GetByID(model.AuthConfigID); err == nil && auth != nil {
+				provider = auth.Provider
+			}
 			modelConfig = &docker.ModelConfig{
-				Provider: model.Provider,
+				Provider: provider,
 				Name:     model.ModelIdentifier,
 				Endpoint: model.EndpointURL,
 			}

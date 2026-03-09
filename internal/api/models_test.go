@@ -39,7 +39,7 @@ func TestModelsAPI(t *testing.T) {
 		model := map[string]interface{}{
 			"id":       "test-model",
 			"name":     "Test Model",
-			"provider": "openai",
+			"authConfigId": "test-auth-config",
 			"modelName": "gpt-4",
 			"apiKeyConfig": map[string]string{
 				"OPENAI_API_KEY": "sk-test-key",
