@@ -7,14 +7,19 @@
   resolved "https://registry.npmjs.org/@0no-co/graphql.web/-/graphql.web-1.2.0.tgz"
   integrity sha512-/1iHy9TTr63gE1YcR5idjx8UREz1s0kFhydf3bBLCXyqjhkIc6igAzTOx3zPifCwFR87tsh/4Pa9cNts6d2otw==
 
-"@ag-ui/client@0.0.46", "@ag-ui/client@^0.0.46":
-  version "0.0.46"
-  resolved "https://registry.npmjs.org/@ag-ui/client/-/client-0.0.46.tgz"
-  integrity sha512-9Bl6GN6N3NWa3Ewqgl8E3nJzo88prIB2LS50bTNgw35h5BxC1UY21c0SImqQWZ+VV5kbhs6AUrriypKEBB7F5A==
+"@ag-ui/a2ui-middleware@0.0.2":
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/@ag-ui/a2ui-middleware/-/a2ui-middleware-0.0.2.tgz#569c9a4f934e1e3faa65303981b5b46189757acd"
+  integrity sha512-dXHWlE9cYxFeQscPpvaLWpbeb7wXjnAlGYMId6kI7nMizSSIgHOrnNTugFRofYm78EY+yVgruNuDjDFWOmYj1A==
+
+"@ag-ui/client@0.0.47", "@ag-ui/client@^0.0.47":
+  version "0.0.47"
+  resolved "https://registry.yarnpkg.com/@ag-ui/client/-/client-0.0.47.tgz#8396eb1ec9ae7ad67263e46e01ca4fc5ec3c7666"
+  integrity sha512-zciVwYV6gmYzdMyWwSDR/VBcOj5x1lHPG/ZGDKyxDHbCeIdGp7sKoGORKHAiPAsfUhReGLKXsR/4IknqwY2PgQ==
   dependencies:
-    "@ag-ui/core" "0.0.46"
-    "@ag-ui/encoder" "0.0.46"
-    "@ag-ui/proto" "0.0.46"
+    "@ag-ui/core" "0.0.47"
+    "@ag-ui/encoder" "0.0.47"
+    "@ag-ui/proto" "0.0.47"
     "@types/uuid" "^10.0.0"
     compare-versions "^6.1.1"
     fast-json-patch "^3.1.1"
@@ -23,21 +28,21 @@
     uuid "^11.1.0"
     zod "^3.22.4"
 
-"@ag-ui/core@0.0.46", "@ag-ui/core@^0.0.46":
-  version "0.0.46"
-  resolved "https://registry.npmjs.org/@ag-ui/core/-/core-0.0.46.tgz"
-  integrity sha512-5/gC9n20ImA10LMFLLYKOowqn2Btrr3UYXWGosmLc1+KJqREI0t35NXnwqoKlw7TWySznF1bpwY6uIvMtO/ZUg==
+"@ag-ui/core@0.0.47", "@ag-ui/core@^0.0.47":
+  version "0.0.47"
+  resolved "https://registry.yarnpkg.com/@ag-ui/core/-/core-0.0.47.tgz#0f6b8cb6bf1f90a562c64d6c0b4585ae0174e4ed"
+  integrity sha512-fHat7ZErAH028R90psYclTWaj6PdcvN2GJxzwWPF/j1c5ceqbF2+6xe+t06Psg+gCzZneI9QE3IkOkdJNplZ5A==
   dependencies:
     rxjs "7.8.1"
     zod "^3.22.4"
 
-"@ag-ui/encoder@0.0.46":
-  version "0.0.46"
-  resolved "https://registry.npmjs.org/@ag-ui/encoder/-/encoder-0.0.46.tgz"
-  integrity sha512-XU6dTgUOFZsXeO+CxCMNl5R8NCbdUyifWP7sRNIi61Et3F/0d0JotLo1y1/9GMGfsJNnP7bjb4YYsx21R7YMlw==
+"@ag-ui/encoder@0.0.47":
+  version "0.0.47"
+  resolved "https://registry.yarnpkg.com/@ag-ui/encoder/-/encoder-0.0.47.tgz#bc4bd74a3e156fd03a6dea4b190baec407eb5226"
+  integrity sha512-AgKTM/DEHtaNrcbMa0z1UQ7lKiKtalbFAjBTTP0vCh+lJ6JWIu9LrpCJQ4EjON1IRoAZtJBORlCj1KY+F14HXQ==
   dependencies:
-    "@ag-ui/core" "0.0.46"
-    "@ag-ui/proto" "0.0.46"
+    "@ag-ui/core" "0.0.47"
+    "@ag-ui/proto" "0.0.47"
 
 "@ag-ui/langgraph@^0.0.24":
   version "0.0.24"
@@ -49,86 +54,77 @@
     partial-json "^0.1.7"
     rxjs "7.8.1"
 
-"@ag-ui/proto@0.0.46":
-  version "0.0.46"
-  resolved "https://registry.npmjs.org/@ag-ui/proto/-/proto-0.0.46.tgz"
-  integrity sha512-+FfVhB1OP5A1+5BrEccQnwfODTbfBRWT3+NVnbW4RDFUDVmO9EUA+XPuO1ZxWcDfziTvQriwm0vNyaXGidSIhw==
+"@ag-ui/mcp-apps-middleware@0.0.2":
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/@ag-ui/mcp-apps-middleware/-/mcp-apps-middleware-0.0.2.tgz#656847e8b8dee89a2bb4aa3ed28498433d9fe6b4"
+  integrity sha512-EMHm65hs3aNfoCpxZ1RYDLvZejmit0yipvzg39jwKrGTzqvB3CZuZUenDS9o2eWu2PZIvcFuvU15nEwH7SZb8A==
   dependencies:
-    "@ag-ui/core" "0.0.46"
+    "@modelcontextprotocol/sdk" "^1.0.0"
+
+"@ag-ui/proto@0.0.47":
+  version "0.0.47"
+  resolved "https://registry.yarnpkg.com/@ag-ui/proto/-/proto-0.0.47.tgz#e1bc2720ca602d6b761c825e4b94008637f39762"
+  integrity sha512-+KCrkeVeR6MulWoYUq9Fwm22gFlI9aKG50eKYRtbTM/Yuei/Che5vjbF297XfSnGUunzScrOmdnTeTCprrtb7A==
+  dependencies:
+    "@ag-ui/core" "0.0.47"
     "@bufbuild/protobuf" "^2.2.5"
     "@protobuf-ts/protoc" "^2.11.1"
 
-"@ai-sdk/anthropic@^2.0.22":
-  version "2.0.67"
-  resolved "https://registry.npmjs.org/@ai-sdk/anthropic/-/anthropic-2.0.67.tgz"
-  integrity sha512-hGtsfU1Dh1r9oBfctZy9+Wb8nSPiD8hBYIVYLGbFSPRrfliyBysJFaenHOGYR0Rd2R8O9ow2dxi05Qk5awerBw==
+"@ai-sdk/anthropic@^3.0.49":
+  version "3.0.58"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/anthropic/-/anthropic-3.0.58.tgz#de49aa3cb7e8a0115eb9d42da05f108d23a90822"
+  integrity sha512-/53SACgmVukO4bkms4dpxpRlYhW8Ct6QZRe6sj1Pi5H00hYhxIrqfiLbZBGxkdRvjsBQeP/4TVGsXgH5rQeb8Q==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "3.0.8"
+    "@ai-sdk/provider-utils" "4.0.19"
 
-"@ai-sdk/gateway@2.0.48":
-  version "2.0.48"
-  resolved "https://registry.npmjs.org/@ai-sdk/gateway/-/gateway-2.0.48.tgz"
-  integrity sha512-cvBOSfyd2MM5SyOygMX3MK96ZHdYDptYZ7WVum3VGyFKDm1Eb2YJI1KfS/XL7ccxta/GFZrWO4Ll3QD0jEodtw==
+"@ai-sdk/gateway@3.0.66":
+  version "3.0.66"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/gateway/-/gateway-3.0.66.tgz#64ad8f7b45acaa4c93c53be2bb39e772e49e31b5"
+  integrity sha512-SIQ0YY0iMuv+07HLsZ+bB990zUJ6S4ujORAh+Jv1V2KGNn73qQKnGO0JBk+w+Res8YqOFSycwDoWcFlQrVxS4A==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "3.0.8"
+    "@ai-sdk/provider-utils" "4.0.19"
     "@vercel/oidc" "3.1.0"
 
-"@ai-sdk/google@^2.0.17":
-  version "2.0.56"
-  resolved "https://registry.npmjs.org/@ai-sdk/google/-/google-2.0.56.tgz"
-  integrity sha512-YPCpnrVF6gGrBemZTaKRTDccnByt8i9HVWwiC2gTzgxj0IkTpy9anw/gh3eFe8LaaNNdYzY1Op5Z8uadIqOYFA==
+"@ai-sdk/google@^3.0.33":
+  version "3.0.43"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/google/-/google-3.0.43.tgz#e955d8cb8a598bc75d5aa39d4eaf1cc580dc1ac8"
+  integrity sha512-NGCgP5g8HBxrNdxvF8Dhww+UKfqAkZAmyYBvbu9YLoBkzAmGKDBGhVptN/oXPB5Vm0jggMdoLycZ8JReQM8Zqg==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "3.0.8"
+    "@ai-sdk/provider-utils" "4.0.19"
 
-"@ai-sdk/mcp@^0.0.8":
-  version "0.0.8"
-  resolved "https://registry.npmjs.org/@ai-sdk/mcp/-/mcp-0.0.8.tgz"
-  integrity sha512-9y9GuGcZ9/+pMIHfpOCJgZVp+AZMv6TkjX2NVT17SQZvTF2N8LXuCXyoUPyi1PxIxzxl0n463LxxaB2O6olC+Q==
+"@ai-sdk/mcp@^1.0.21":
+  version "1.0.25"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/mcp/-/mcp-1.0.25.tgz#2133d64b4e0cdf9b041ef32c5bfc0cbbba4991b7"
+  integrity sha512-vMlXUPGHGDE2vzLcPR8sw7Dhz2OBjtPU5lB+lIuC1hNQo4REuUC08P0e96/hzBKf4oQYJ8Zo6uP8AG2qThyFbg==
   dependencies:
-    "@ai-sdk/provider" "2.0.0"
-    "@ai-sdk/provider-utils" "3.0.17"
+    "@ai-sdk/provider" "3.0.8"
+    "@ai-sdk/provider-utils" "4.0.19"
     pkce-challenge "^5.0.0"
 
-"@ai-sdk/openai@^2.0.42":
-  version "2.0.95"
-  resolved "https://registry.npmjs.org/@ai-sdk/openai/-/openai-2.0.95.tgz"
-  integrity sha512-2CABPaa1UNh7dPyZUIB/Dc4AbvJioFnmryRx45sx7ezBSOdR0zxG6gbrSd/fZ0GVbptSZeLmF9omu10d/GxmJA==
+"@ai-sdk/openai@^3.0.36":
+  version "3.0.41"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-3.0.41.tgz#22f559888cd4f9bb312c5c576441c3412f442e7b"
+  integrity sha512-IZ42A+FO+vuEQCVNqlnAPYQnnUpUfdJIwn1BEDOBywiEHa23fw7PahxVtlX9zm3/zMvTW4JKPzWyvAgDu+SQ2A==
   dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/provider" "3.0.8"
+    "@ai-sdk/provider-utils" "4.0.19"
 
-"@ai-sdk/provider-utils@3.0.17":
-  version "3.0.17"
-  resolved "https://registry.npmjs.org/@ai-sdk/provider-utils/-/provider-utils-3.0.17.tgz"
-  integrity sha512-TR3Gs4I3Tym4Ll+EPdzRdvo/rc8Js6c4nVhFLuvGLX/Y4V9ZcQMa/HTiYsHEgmYrf1zVi6Q145UEZUfleOwOjw==
+"@ai-sdk/provider-utils@4.0.19":
+  version "4.0.19"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-4.0.19.tgz#535f87c34f19d5584068c522005780ba59123093"
+  integrity sha512-3eG55CrSWCu2SXlqq2QCsFjo3+E7+Gmg7i/oRVoSZzIodTuDSfLb3MRje67xE9RFea73Zao7Lm4mADIfUETKGg==
   dependencies:
-    "@ai-sdk/provider" "2.0.0"
-    "@standard-schema/spec" "^1.0.0"
+    "@ai-sdk/provider" "3.0.8"
+    "@standard-schema/spec" "^1.1.0"
     eventsource-parser "^3.0.6"
 
-"@ai-sdk/provider-utils@3.0.21":
-  version "3.0.21"
-  resolved "https://registry.npmjs.org/@ai-sdk/provider-utils/-/provider-utils-3.0.21.tgz"
-  integrity sha512-veuMwTLxsgh31Jjn0SnBABnM1f7ebHhRWcV2ZuY3hP3iJDCZ8VXBaYqcHXoOQDqUXTCas08sKQcHyWK+zl882Q==
-  dependencies:
-    "@ai-sdk/provider" "2.0.1"
-    "@standard-schema/spec" "^1.0.0"
-    eventsource-parser "^3.0.6"
-
-"@ai-sdk/provider@2.0.0":
-  version "2.0.0"
-  resolved "https://registry.npmjs.org/@ai-sdk/provider/-/provider-2.0.0.tgz"
-  integrity sha512-6o7Y2SeO9vFKB8lArHXehNuusnpddKPk7xqL7T2/b+OvXMRIXUO1rR4wcv1hAFUAT9avGZshty3Wlua/XA7TvA==
-  dependencies:
-    json-schema "^0.4.0"
-
-"@ai-sdk/provider@2.0.1":
-  version "2.0.1"
-  resolved "https://registry.npmjs.org/@ai-sdk/provider/-/provider-2.0.1.tgz"
-  integrity sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==
+"@ai-sdk/provider@3.0.8":
+  version "3.0.8"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/provider/-/provider-3.0.8.tgz#fd7fac7533c03534ac1d3fb710a6b96e2aa00263"
+  integrity sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ==
   dependencies:
     json-schema "^0.4.0"
 
@@ -350,28 +346,28 @@
   resolved "https://registry.npmjs.org/@chevrotain/utils/-/utils-11.1.2.tgz"
   integrity sha512-4mudFAQ6H+MqBTfqLmU7G1ZwRzCLfJEooL/fsF6rCX5eePMbGhoy5n4g+G4vlh2muDcsCTJtL+uKbOzWxs5LHA==
 
-"@copilotkit/react-core@1.52.1", "@copilotkit/react-core@^1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkit/react-core/-/react-core-1.52.1.tgz"
-  integrity sha512-AfeDYlepQq+LukZHztGi2yCpKGqCqD3gDqMg3ApBE3wFSOEuz770+l+c0pWVv/lalhBbT8e67wHr/gAqzmqRPA==
+"@copilotkit/react-core@1.53.0", "@copilotkit/react-core@^1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkit/react-core/-/react-core-1.53.0.tgz#aa52ab61e17e76dab440fe58a1f6b0d71eb4fa01"
+  integrity sha512-UuV8Rp5ILHM4BFyLG7bnNNVPc82kzTaTpV+J6+u3mAUOkFtyC8xAfeMYOErqPtgf6vDgJb31afCnVAZeO6vYRg==
   dependencies:
-    "@ag-ui/client" "^0.0.46"
-    "@copilotkit/runtime-client-gql" "1.52.1"
-    "@copilotkit/shared" "1.52.1"
-    "@copilotkitnext/core" "1.52.1"
-    "@copilotkitnext/react" "1.52.1"
+    "@ag-ui/client" "^0.0.47"
+    "@copilotkit/runtime-client-gql" "1.53.0"
+    "@copilotkit/shared" "1.53.0"
+    "@copilotkitnext/core" "1.53.0"
+    "@copilotkitnext/react" "1.53.0"
     "@scarf/scarf" "^1.3.0"
     react-markdown "^8.0.7"
     untruncate-json "^0.0.1"
 
-"@copilotkit/react-ui@^1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkit/react-ui/-/react-ui-1.52.1.tgz"
-  integrity sha512-wAvcVrv+x/YDAbzNf2p5eayBVdKdHiamIP6zI74cRlcjTM7AI85OZj4Wh7K5Eqnz26yQRDSta/gayXAyb/ZMvA==
+"@copilotkit/react-ui@^1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkit/react-ui/-/react-ui-1.53.0.tgz#a9f78233382629a9df5ade21d9e764a1e7cefc17"
+  integrity sha512-I3JPGsAd6bv+wQHyTQikQafuSVE1RbJJWDj/DRtZQ4PQbXUDiClw/2FrqYS2Axd1iOepp/sAxk6AxIF0dhohXg==
   dependencies:
-    "@copilotkit/react-core" "1.52.1"
-    "@copilotkit/runtime-client-gql" "1.52.1"
-    "@copilotkit/shared" "1.52.1"
+    "@copilotkit/react-core" "1.53.0"
+    "@copilotkit/runtime-client-gql" "1.53.0"
+    "@copilotkit/shared" "1.53.0"
     "@headlessui/react" "^2.2.9"
     react-markdown "^10.1.0"
     react-syntax-highlighter "^15.6.1"
@@ -379,34 +375,33 @@
     remark-gfm "^4.0.1"
     remark-math "^6.0.0"
 
-"@copilotkit/runtime-client-gql@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkit/runtime-client-gql/-/runtime-client-gql-1.52.1.tgz"
-  integrity sha512-xQPvqUy0gBG09pnldpnwnU9QgQcfFI0VV8Xl/9w5rD9tvGIhM/V+57jXgvu5GbCwKbBNC8P9WJ7Pt4OX33+xEA==
+"@copilotkit/runtime-client-gql@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkit/runtime-client-gql/-/runtime-client-gql-1.53.0.tgz#74dbe569ad9bc40fe15e51b708f4cd58239995af"
+  integrity sha512-P7yaA6NlU5LW+Ea65xEHyigV1yaJH7LWPHtnQL3MOz7X1kZj8YazEtujZML3YB/58z1/4L3yvdGFpEMmyTtVag==
   dependencies:
-    "@copilotkit/runtime" "1.52.1"
-    "@copilotkit/shared" "1.52.1"
+    "@copilotkit/shared" "1.53.0"
     "@urql/core" "^5.0.3"
     untruncate-json "^0.0.1"
     urql "^4.1.0"
 
-"@copilotkit/runtime@1.52.1", "@copilotkit/runtime@^1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkit/runtime/-/runtime-1.52.1.tgz"
-  integrity sha512-Gojbv3rGdgLfXOHt47NxR0rufWl+78nBCdBX60KzBy9slf3EhRpURu0GurzbjHJNXWMgPU2watSooxZ4zKdEGQ==
+"@copilotkit/runtime@^1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkit/runtime/-/runtime-1.53.0.tgz#0780bda9e36c81adcb1efce41409a9f601888153"
+  integrity sha512-M0f4wQ9HQl0qU4QCE5BN7p55MkVuzVJIBFg2MxAZ0C8HtbE+AqFuYHtTsaU0QZSrCmAlWwRTZhhhxY/IGY07lg==
   dependencies:
-    "@ag-ui/client" "^0.0.46"
-    "@ag-ui/core" "^0.0.46"
+    "@ag-ui/client" "^0.0.47"
+    "@ag-ui/core" "^0.0.47"
     "@ag-ui/langgraph" "^0.0.24"
-    "@ai-sdk/anthropic" "^2.0.22"
-    "@ai-sdk/openai" "^2.0.42"
-    "@copilotkit/shared" "1.52.1"
-    "@copilotkitnext/agent" "1.52.1"
-    "@copilotkitnext/runtime" "1.52.1"
+    "@ai-sdk/anthropic" "^3.0.49"
+    "@ai-sdk/openai" "^3.0.36"
+    "@copilotkit/shared" "1.53.0"
+    "@copilotkitnext/agent" "1.53.0"
+    "@copilotkitnext/runtime" "1.53.0"
     "@graphql-yoga/plugin-defer-stream" "^3.3.1"
     "@hono/node-server" "^1.13.5"
     "@scarf/scarf" "^1.3.0"
-    ai "^5.0.92"
+    ai "^6.0.104"
     class-transformer "^0.5.1"
     class-validator "^0.14.1"
     graphql "^16.8.1"
@@ -422,10 +417,10 @@
     type-graphql "2.0.0-rc.1"
     zod "^3.23.3"
 
-"@copilotkit/shared@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkit/shared/-/shared-1.52.1.tgz"
-  integrity sha512-5qe6098UGhZt0HP2mYdsICRg9BDGX/6GDI3hgr1wpZXj9ov8vAR4rX7VICKplu0dSBsE/SEb8Ymhjv89pJvgVw==
+"@copilotkit/shared@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkit/shared/-/shared-1.53.0.tgz#3023288a61d7e241417d43d578ea024a3bae44c0"
+  integrity sha512-8KhALz8EgR7QIWGXrTYbc0YgM1mOrqzFhcI4dxiNE6mplPvZAjj2zfRyxG1IhitL3KnOfb4Fmt6ph23ZuLf+AA==
   dependencies:
     "@segment/analytics-node" "^2.1.2"
     chalk "4.1.2"
@@ -433,42 +428,43 @@
     uuid "^10.0.0"
     zod "^3.23.3"
 
-"@copilotkitnext/agent@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkitnext/agent/-/agent-1.52.1.tgz"
-  integrity sha512-Vj3WN5Ci+5tcOsvIM4npTg9khaakgeS8L3mpLbHywVptIammc3el0N5yRC6cfKseAPsmdLTTSFebYNs/HT6QVw==
+"@copilotkitnext/agent@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkitnext/agent/-/agent-1.53.0.tgz#8bd9d3b056d2b67b7490a2b0884c30d6bb452ddd"
+  integrity sha512-Dqisb2WJK2QpszZtxbzF+qUjV/T2ctQrhdXohIOALarlszzkPS3U+pYc1xHB725g+Vds5kb9mgWjWOzeJ4rHcw==
   dependencies:
-    "@ag-ui/client" "0.0.46"
-    "@ai-sdk/anthropic" "^2.0.22"
-    "@ai-sdk/google" "^2.0.17"
-    "@ai-sdk/mcp" "^0.0.8"
-    "@ai-sdk/openai" "^2.0.42"
+    "@ag-ui/client" "0.0.47"
+    "@ai-sdk/anthropic" "^3.0.49"
+    "@ai-sdk/google" "^3.0.33"
+    "@ai-sdk/mcp" "^1.0.21"
+    "@ai-sdk/openai" "^3.0.36"
     "@modelcontextprotocol/sdk" "^1.18.2"
-    ai "^5.0.92"
+    ai "^6.0.104"
     rxjs "7.8.1"
     zod "^3.25.75"
 
-"@copilotkitnext/core@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkitnext/core/-/core-1.52.1.tgz"
-  integrity sha512-abTeSWbNwkO484S0g5Mrin/mZOsUhFi74x2LUZoErupjN4fbg4jxXGDIezQZPalVocD9OF8oxVKqh2185i7gkA==
+"@copilotkitnext/core@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkitnext/core/-/core-1.53.0.tgz#25ba9c7811371d254af0f4f33312f0c06d8ebec9"
+  integrity sha512-l6mo3ltKOnxUP42z4/51IbCbuJG8dBCLGCrhrLDGfPIhJi7APMqolCkpyIMXWx4bnmKL7x7ogdtq7YHAPFhdwg==
   dependencies:
-    "@ag-ui/client" "0.0.46"
-    "@copilotkitnext/shared" "1.52.1"
+    "@ag-ui/client" "0.0.47"
+    "@copilotkitnext/shared" "1.53.0"
+    phoenix "^1.8.4"
     rxjs "7.8.1"
     zod "^3.25.75"
     zod-to-json-schema "^3.24.6"
 
-"@copilotkitnext/react@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkitnext/react/-/react-1.52.1.tgz"
-  integrity sha512-2e03lZIOg7geVez+Vf3heNHo12/D9QnC9KYQMAEOO29WGBJh+Nz0Tlu9y/6n3Tco2x4RW390szsVx/ea5v6dGg==
+"@copilotkitnext/react@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkitnext/react/-/react-1.53.0.tgz#c75a83ec7e2dc4c9399a9149e8fa8522662d3a9b"
+  integrity sha512-NNx2sST1oo4d8QzJwP/eyJAGqyGlLrxEy7hchSaZUcja+Qo4w/oKqmSErbSBlqd5nZGOTxxD99RkeWVIwuolGQ==
   dependencies:
-    "@ag-ui/client" "0.0.46"
-    "@ag-ui/core" "0.0.46"
-    "@copilotkitnext/core" "1.52.1"
-    "@copilotkitnext/shared" "1.52.1"
-    "@copilotkitnext/web-inspector" "1.52.1"
+    "@ag-ui/client" "0.0.47"
+    "@ag-ui/core" "0.0.47"
+    "@copilotkitnext/core" "1.53.0"
+    "@copilotkitnext/shared" "1.53.0"
+    "@copilotkitnext/web-inspector" "1.53.0"
     "@lit-labs/react" "^2.0.2"
     "@radix-ui/react-dropdown-menu" "^2.1.15"
     "@radix-ui/react-slot" "^1.2.3"
@@ -484,36 +480,40 @@
     use-stick-to-bottom "^1.1.1"
     zod "^3.25.75"
 
-"@copilotkitnext/runtime@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkitnext/runtime/-/runtime-1.52.1.tgz"
-  integrity sha512-swmhzB0X6LoNGWTQkXmnO9mJTy/k2XJxD8aFJM7h8xtaRCk80UtxnYV0hBDJJOxk0YW0PHvtiGosr865ZupIUw==
+"@copilotkitnext/runtime@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkitnext/runtime/-/runtime-1.53.0.tgz#cb8615d423ec1ac01f0b6c8dee999f77461c9971"
+  integrity sha512-dsbttmEKJFxE25sPsyT4ktrnLcAHjEuFMjcWdSTMeD/D8cfL+MCx2NuMNV7caCymvO3b5q7VW7RTJQP1Hh1/tw==
   dependencies:
-    "@ag-ui/client" "0.0.46"
-    "@ag-ui/core" "0.0.46"
-    "@ag-ui/encoder" "0.0.46"
-    "@copilotkitnext/shared" "1.52.1"
+    "@ag-ui/a2ui-middleware" "0.0.2"
+    "@ag-ui/client" "0.0.47"
+    "@ag-ui/core" "0.0.47"
+    "@ag-ui/encoder" "0.0.47"
+    "@ag-ui/mcp-apps-middleware" "0.0.2"
+    "@copilotkitnext/shared" "1.53.0"
     cors "^2.8.5"
     express "^4.21.2"
     hono "^4.11.4"
+    phoenix "^1.8.4"
     rxjs "7.8.1"
+    ws "^8.18.0"
 
-"@copilotkitnext/shared@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkitnext/shared/-/shared-1.52.1.tgz"
-  integrity sha512-92h0ZUtapuxroEOQdNbgU6FTgQKG8+UuGZey5vXq4ayTTmHcGwZZvsJ9aYjD7OUYNXj3J/4lj9iecj7PCg5Efw==
+"@copilotkitnext/shared@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkitnext/shared/-/shared-1.53.0.tgz#537813167897b4ba1caf9aed21e493cd68df4320"
+  integrity sha512-RdhudJUq79RM0zLLzIJDAg//aLc0vW2WocaJmsQzz/awZEbcbo13Ag6jL+oZOOlq++Lu9xWd7SQ83jhoZwCJXg==
   dependencies:
-    "@ag-ui/client" "0.0.46"
+    "@ag-ui/client" "0.0.47"
     partial-json "^0.1.7"
     uuid "^11.1.0"
 
-"@copilotkitnext/web-inspector@1.52.1":
-  version "1.52.1"
-  resolved "https://registry.npmjs.org/@copilotkitnext/web-inspector/-/web-inspector-1.52.1.tgz"
-  integrity sha512-SP+f3DvgFxtGpxd4I30laAkW77mIJpM2UL/KJ1tVCVUzSqv3SefEBFDdMRaQWjy7kJaZTdGDHxqBWpxpfWiTqg==
+"@copilotkitnext/web-inspector@1.53.0":
+  version "1.53.0"
+  resolved "https://registry.yarnpkg.com/@copilotkitnext/web-inspector/-/web-inspector-1.53.0.tgz#5f557affabbd52e3ad7d285c5b02fc2d3afc47c1"
+  integrity sha512-7IP7uZhyBPGjieUKySEvinp30KBNJ1nekdrWeFVENflm6ypk9W50o2rITLcPlO1jN5PrzrMn8Fwo4yYMphQuRA==
   dependencies:
-    "@ag-ui/client" "0.0.46"
-    "@copilotkitnext/core" "1.52.1"
+    "@ag-ui/client" "0.0.47"
+    "@copilotkitnext/core" "1.53.0"
     lit "^3.2.0"
     lucide "^0.525.0"
     marked "^12.0.2"
@@ -921,7 +921,7 @@
   dependencies:
     langium "^4.0.0"
 
-"@modelcontextprotocol/sdk@^1.18.2":
+"@modelcontextprotocol/sdk@^1.0.0", "@modelcontextprotocol/sdk@^1.18.2":
   version "1.27.1"
   resolved "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.27.1.tgz"
   integrity sha512-sr6GbP+4edBwFndLbM60gf07z0FQ79gaExpnsjMGePXqFcSSb7t6iscpjk9DhFhwd+mTEQrzNafGP8/iGGFYaA==
@@ -1498,9 +1498,9 @@
   resolved "https://registry.npmjs.org/@shikijs/vscode-textmate/-/vscode-textmate-10.0.2.tgz"
   integrity sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==
 
-"@standard-schema/spec@^1.0.0":
+"@standard-schema/spec@^1.1.0":
   version "1.1.0"
-  resolved "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz"
+  resolved "https://registry.yarnpkg.com/@standard-schema/spec/-/spec-1.1.0.tgz#a79b55dbaf8604812f52d140b2c9ab41bc150bb8"
   integrity sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==
 
 "@swc/helpers@^0.5.0":
@@ -1847,6 +1847,13 @@
   dependencies:
     undici-types "~5.26.4"
 
+"@types/node@^20.11.24":
+  version "20.19.37"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-20.19.37.tgz#b4fb4033408dd97becce63ec932c9ec57a9e2919"
+  integrity sha512-8kzdPJ3FsNsVIurqBs7oodNnCEVbni9yUEkaHbgptDACOPW04jimGagZ51E6+lXUwJjgnBw+hyko/lkFWCldqw==
+  dependencies:
+    undici-types "~6.21.0"
+
 "@types/prop-types@*", "@types/prop-types@^15.0.0":
   version "15.7.15"
   resolved "https://registry.npmjs.org/@types/prop-types/-/prop-types-15.7.15.tgz"
@@ -2016,14 +2023,14 @@ agentkeepalive@^4.2.1:
   dependencies:
     humanize-ms "^1.2.1"
 
-ai@^5.0.92:
-  version "5.0.142"
-  resolved "https://registry.npmjs.org/ai/-/ai-5.0.142.tgz"
-  integrity sha512-Esx0GhEavWffxwWL9gHAgfM7LaPMQ1vo+qf+sZDTiQaJCj3x52hnV9WsYW/j+rWuf//+p6dAIrF/t7YSa+HNVQ==
+ai@^6.0.104:
+  version "6.0.116"
+  resolved "https://registry.yarnpkg.com/ai/-/ai-6.0.116.tgz#dc1c3d929453e165fcd3f188d8663617ecf94129"
+  integrity sha512-7yM+cTmyRLeNIXwt4Vj+mrrJgVQ9RMIW5WO0ydoLoYkewIvsMcvUmqS4j2RJTUXaF1HphwmSKUMQ/HypNRGOmA==
   dependencies:
-    "@ai-sdk/gateway" "2.0.48"
-    "@ai-sdk/provider" "2.0.1"
-    "@ai-sdk/provider-utils" "3.0.21"
+    "@ai-sdk/gateway" "3.0.66"
+    "@ai-sdk/provider" "3.0.8"
+    "@ai-sdk/provider-utils" "4.0.19"
     "@opentelemetry/api" "1.9.0"
 
 ajv-formats@^3.0.1:
@@ -4880,6 +4887,11 @@ pathe@^2.0.1, pathe@^2.0.3:
   resolved "https://registry.npmjs.org/pathe/-/pathe-2.0.3.tgz"
   integrity sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==
 
+phoenix@^1.8.4:
+  version "1.8.5"
+  resolved "https://registry.yarnpkg.com/phoenix/-/phoenix-1.8.5.tgz#2cc6bada205f58e3ed5ec6e479dfbb00716b794d"
+  integrity sha512-Oj5nlRV/NKXkjBx8uMgCMmgMf1twd/B2qOcO30cHLH1PCGR8149o4T1lRIaqN4nq2KQJAeMqPiLdh1Asd0wQFg==
+
 picocolors@^1.1.1:
   version "1.1.1"
   resolved "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz"
@@ -5845,6 +5857,11 @@ undici-types@~5.26.4:
   resolved "https://registry.npmjs.org/undici-types/-/undici-types-5.26.5.tgz"
   integrity sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==
 
+undici-types@~6.21.0:
+  version "6.21.0"
+  resolved "https://registry.yarnpkg.com/undici-types/-/undici-types-6.21.0.tgz#691d00af3909be93a7faa13be61b3a5b50ef12cb"
+  integrity sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==
+
 unified@^10.0.0:
   version "10.1.2"
   resolved "https://registry.npmjs.org/unified/-/unified-10.1.2.tgz"
@@ -6191,6 +6208,11 @@ wrappy@1:
   version "1.0.2"
   resolved "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz"
   integrity sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==
+
+ws@^8.18.0:
+  version "8.19.0"
+  resolved "https://registry.yarnpkg.com/ws/-/ws-8.19.0.tgz#ddc2bdfa5b9ad860204f5a72a4863a8895fd8c8b"
+  integrity sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==
 
 xtend@^4.0.0:
   version "4.0.2"
