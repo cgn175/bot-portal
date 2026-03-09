@@ -31,6 +31,10 @@ type Router struct {
 	// SSE connections for frontend task streaming
 	taskStreamMu    sync.RWMutex
 	taskStreamConns map[string]map[string]chan *a2a.TaskUpdate // taskID -> addr -> channel
+
+	// SSE connections for channel message streaming
+	msgStreamMu    sync.RWMutex
+	msgStreamConns map[string]map[string]chan struct{} // channelID -> addr -> notify channel
 }
 
 // NewRouter creates a new API router
@@ -53,6 +57,7 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 		authConfigStore: authConfigStore,
 		agentHandler:    agentHandler,
 		taskStreamConns: make(map[string]map[string]chan *a2a.TaskUpdate),
+		msgStreamConns:  make(map[string]map[string]chan struct{}),
 	}
 
 	// Initialize A2A router

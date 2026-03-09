@@ -37,6 +37,7 @@ export default function ChannelView() {
 
     // Use SSE for real-time message updates
     const eventSource = api.streamMessages(id)
+    let pollInterval: ReturnType<typeof setInterval> | null = null
 
     eventSource.onmessage = (event) => {
       try {
@@ -50,12 +51,13 @@ export default function ChannelView() {
 
     eventSource.onerror = () => {
       eventSource.close()
-      // Fallback to polling if SSE fails
-      const interval = setInterval(loadData, 10000)
-      return () => clearInterval(interval)
+      pollInterval = setInterval(loadData, 10000)
     }
 
-    return () => eventSource.close()
+    return () => {
+      eventSource.close()
+      if (pollInterval) clearInterval(pollInterval)
+    }
   }, [id])
 
   if (loading && !channel) {

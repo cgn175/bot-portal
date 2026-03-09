@@ -18,6 +18,11 @@ func NewSQLite(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Enable WAL mode for concurrent read/write support and set a busy
+	// timeout so writers retry instead of immediately returning SQLITE_BUSY.
+	db.Exec("PRAGMA journal_mode=WAL")
+	db.Exec("PRAGMA busy_timeout=5000")
+
 	return db, nil
 }
 

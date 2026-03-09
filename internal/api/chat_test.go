@@ -29,7 +29,7 @@ func TestHandleChatCompletions_ClaudeModel(t *testing.T) {
 	model := &models.Model{
 		ID:              "claude-test",
 		Name:            "Claude Test",
-		Provider:        "anthropic",
+
 		ModelIdentifier: "claude-opus-4-6",
 		EndpointURL:     "https://api.anthropic.com/v1",
 	}
@@ -157,7 +157,7 @@ func TestChatCompletions_ModelFallbackResolution(t *testing.T) {
 	if err := modelStore.Create(&models.Model{
 		ID:              "model-1",
 		Name:            "Test Model",
-		Provider:        "openai",
+
 		ModelIdentifier: "gpt-4o",
 		IsDefault:       true,
 	}); err != nil {

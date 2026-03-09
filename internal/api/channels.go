@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/zeroclaw/bot-portal/internal/store"
 )
 
 // ============================================================================
@@ -86,10 +88,12 @@ func (r *Router) getChannelMessages(w http.ResponseWriter, req *http.Request, ch
 }
 
 // ============================================================================
-// Message Stream
+// Message Stream (SSE)
 // ============================================================================
 
 func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
+	channelID := req.URL.Query().Get("channel_id")
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -107,6 +111,12 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Subscribe to notifications for this channel
+	ch := make(chan struct{}, 1)
+	addr := req.RemoteAddr
+	r.addMsgStreamConn(channelID, addr, ch)
+	defer r.removeMsgStreamConn(channelID, addr)
+
 	notify := req.Context().Done()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -115,9 +125,79 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 		select {
 		case <-notify:
 			return
+		case <-ch:
+			r.sendChannelMessages(w, flusher, channelID)
 		case <-ticker.C:
 			fmt.Fprintf(w, ": keepalive\n\n")
 			flusher.Flush()
+		}
+	}
+}
+
+func (r *Router) sendChannelMessages(w http.ResponseWriter, flusher http.Flusher, channelID string) {
+	var messages []*store.TaskLog
+	var err error
+	if channelID != "" {
+		messages, err = r.messageStore.ListByChannel(channelID, 100)
+	} else {
+		messages, err = r.messageStore.ListAll(100)
+	}
+	if err != nil {
+		return
+	}
+
+	data, err := json.Marshal(messages)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
+}
+
+func (r *Router) addMsgStreamConn(channelID, addr string, ch chan struct{}) {
+	r.msgStreamMu.Lock()
+	defer r.msgStreamMu.Unlock()
+	if r.msgStreamConns[channelID] == nil {
+		r.msgStreamConns[channelID] = make(map[string]chan struct{})
+	}
+	r.msgStreamConns[channelID][addr] = ch
+}
+
+func (r *Router) removeMsgStreamConn(channelID, addr string) {
+	r.msgStreamMu.Lock()
+	defer r.msgStreamMu.Unlock()
+	if conns, ok := r.msgStreamConns[channelID]; ok {
+		delete(conns, addr)
+		if len(conns) == 0 {
+			delete(r.msgStreamConns, channelID)
+		}
+	}
+}
+
+// notifyMsgStream signals all SSE clients subscribed to a channel that new data is available.
+func (r *Router) notifyMsgStream(channelID string) {
+	r.msgStreamMu.RLock()
+	defer r.msgStreamMu.RUnlock()
+
+	// Notify clients subscribed to this specific channel
+	if conns, ok := r.msgStreamConns[channelID]; ok {
+		for _, ch := range conns {
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
+		}
+	}
+
+	// Also notify clients subscribed to all channels (empty channelID)
+	if channelID != "" {
+		if conns, ok := r.msgStreamConns[""]; ok {
+			for _, ch := range conns {
+				select {
+				case ch <- struct{}{}:
+				default:
+				}
+			}
 		}
 	}
 }

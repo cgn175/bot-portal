@@ -52,6 +52,7 @@ export default function MessageViewer() {
     loadMessages()
 
     const eventSource = api.streamMessages(selectedChannelId)
+    let pollInterval: ReturnType<typeof setInterval> | null = null
 
     eventSource.onmessage = (event) => {
       try {
@@ -65,11 +66,13 @@ export default function MessageViewer() {
 
     eventSource.onerror = () => {
       eventSource.close()
-      const interval = setInterval(loadMessages, 10000)
-      return () => clearInterval(interval)
+      pollInterval = setInterval(loadMessages, 10000)
     }
 
-    return () => eventSource.close()
+    return () => {
+      eventSource.close()
+      if (pollInterval) clearInterval(pollInterval)
+    }
   }, [selectedChannelId])
 
   const selectedChannel = channels.find(c => c.id === selectedChannelId)
