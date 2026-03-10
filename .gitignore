@@ -7,6 +7,8 @@
 # Project specific
 *.db
 /portal.db
+*.db-wal
+*.db-shm
 
 # OS
 .DS_Store

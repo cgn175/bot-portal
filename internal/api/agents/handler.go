@@ -5,15 +5,34 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/zeroclaw/bot-portal/internal/a2a"
 	"github.com/zeroclaw/bot-portal/internal/docker"
 	"github.com/zeroclaw/bot-portal/internal/store"
+)
+
+// ValidAgentIDPattern defines allowed characters in agent IDs
+// Allows: alphanumeric, hyphens, underscores
+var ValidAgentIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+const (
+	MaxAgentIDLength = 64
+	MinAgentIDLength = 1
+
+	// TokenBytes is the number of random bytes for bearer tokens
+	// 64 bytes = 512 bits of entropy = 128 hex characters
+	// This provides ~2^256 security against brute force
+	TokenBytes = 64
+
+	// Expected token length in hex encoding
+	ExpectedTokenLength = TokenBytes * 2
 )
 
 // ============================================================================
@@ -95,7 +114,11 @@ func (h *Handler) HandleAgentDetail(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	agentID := path[len("/api/agents/"):]
+	agentID, err := h.validateAndExtractAgentID(path)
+	if err != nil {
+		http.Error(w, "Invalid agent ID: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Handle sub-routes
 	switch req.URL.Query().Get("action") {
@@ -166,6 +189,25 @@ func (h *Handler) StreamAgents(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// validateAndExtractAgentID extracts and validates an agent ID from the URL path
+// Returns an error if the ID is invalid or potentially malicious
+func (h *Handler) validateAndExtractAgentID(path string) (string, error) {
+	prefix := "/api/agents/"
+	agentID := path[len(prefix):]
+
+	// Check length constraints
+	if len(agentID) < MinAgentIDLength || len(agentID) > MaxAgentIDLength {
+		return "", fmt.Errorf("agent ID must be between %d and %d characters", MinAgentIDLength, MaxAgentIDLength)
+	}
+
+	// Validate against allowed pattern
+	if !ValidAgentIDPattern.MatchString(agentID) {
+		return "", errors.New("agent ID contains invalid characters (allowed: alphanumeric, hyphens, underscores)")
+	}
+
+	return agentID, nil
+}
+
 // ============================================================================
 // CRUD Handlers
 // ============================================================================
@@ -215,8 +257,8 @@ func (h *Handler) createAgent(w http.ResponseWriter, req *http.Request) {
 		agent.Image = "native"
 	}
 
-	// Generate bearer token inline
-	b := make([]byte, 32)
+	// Generate bearer token with high entropy (512 bits)
+	b := make([]byte, TokenBytes)
 	if _, err := rand.Read(b); err != nil {
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return

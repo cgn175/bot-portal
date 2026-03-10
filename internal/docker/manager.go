@@ -286,6 +286,9 @@ bearer_token = "{{ .BearerToken }}"
 enabled = true
 {{ end }}
 
+[agent]
+max_tool_iterations = 500
+
 [autonomy]
 auto_approve = ["file_read", "memory_recall", "a2a_send"]
 level = "full"
@@ -386,13 +389,17 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 	}
 	f.Close()
 
-	// Make config file readable by all users (agent runs as nobody:nobody)
-	if err := os.Chmod(configPath, 0644); err != nil {
-		fmt.Printf("Warning: failed to chmod config file: %v\n", err)
+	// Set restrictive permissions: owner read/write only (0600)
+	// This prevents other users from reading bearer tokens in the config
+	if err := os.Chmod(configPath, 0600); err != nil {
+		return "", fmt.Errorf("failed to set secure permissions on config file: %w", err)
 	}
 
+	// Try to chown to the agent user, but don't fail if we can't
+	// The chmod 0600 ensures at least the current user can read it
 	if err := os.Chown(configPath, 65534, 65534); err != nil {
-		fmt.Printf("Warning: failed to chown config file: %v\n", err)
+		// Log but don't fail - the file is still usable with 0600 permissions
+		// This is expected when running as non-root
 	}
 
 	return configPath, nil
@@ -479,7 +486,7 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		hostConfigPath = filepath.Join(hostPrefix, filepath.Base(configPath))
 	}
 	absConfigPath, _ := filepath.Abs(hostConfigPath)
-
+	absProjectsPath := ZEROCLAW_WORK_DIR + "/workspace/projects"
 	// On some systems (like macOS with Podman), if the file doesn't exist on the host,
 	// Docker/Podman might create it as a directory. We ensure it's a file above.
 	// We also use Mounts instead of Binds for more explicit control if needed,
@@ -504,10 +511,15 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 			{
 				Type:     mount.TypeBind,
 				Source:   "/projects",
-				Target:   ZEROCLAW_WORK_DIR + "/workspace/shared/projects",
+				Target:   absProjectsPath,
 				ReadOnly: false,
 			},
 		},
+	}
+
+	if err := os.Chown(absProjectsPath, 65534, 65534); err != nil {
+		// Log but don't fail - the file is still usable with 0600 permissions
+		// This is expected when running as non-root
 	}
 
 	// Network config

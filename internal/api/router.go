@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -176,8 +178,18 @@ func (r *Router) Run(addr string) error {
 
 // corsMiddleware adds CORS headers for frontend dev
 func (r *Router) corsMiddleware(next http.Handler) http.Handler {
+	// Parse allowed origins from environment
+	allowedOrigins := r.parseAllowedOrigins()
+
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := req.Header.Get("Origin")
+
+		// Check if origin is allowed
+		if r.isOriginAllowed(origin, allowedOrigins) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
@@ -188,6 +200,46 @@ func (r *Router) corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, req)
 	})
+}
+
+// parseAllowedOrigins parses ALLOWED_ORIGINS env var into a slice
+// Defaults to localhost origins for development if not set
+func (r *Router) parseAllowedOrigins() []string {
+	allowed := os.Getenv("ALLOWED_ORIGINS")
+	if allowed == "" {
+		// Default: allow localhost origins for development
+		return []string{
+			"http://localhost:3000",
+			"http://localhost:5173",
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:5173",
+		}
+	}
+
+	// Split by comma for multiple origins
+	var origins []string
+	for _, o := range strings.Split(allowed, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
+}
+
+// isOriginAllowed checks if an origin is in the allowed list
+func (r *Router) isOriginAllowed(origin string, allowed []string) bool {
+	// No origin header (e.g., same-origin requests) - allow
+	if origin == "" {
+		return true
+	}
+
+	for _, allowed := range allowed {
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 // responseRecorder wraps http.ResponseWriter to capture status code
@@ -251,7 +303,15 @@ func (r *Router) requireBearerToken(next http.HandlerFunc) http.HandlerFunc {
 
 		valid := false
 		for _, agent := range agents {
-			if agent.BearerToken == token {
+			// Use constant-time comparison to prevent timing attacks
+			// This prevents attackers from guessing tokens byte-by-byte
+			if len(agent.BearerToken) != len(token) {
+				continue
+			}
+			if subtle.ConstantTimeCompare(
+				[]byte(agent.BearerToken),
+				[]byte(token),
+			) == 1 {
 				valid = true
 				// Auto-set X-Agent-ID from token so the sender is always identified
 				if req.Header.Get("X-Agent-ID") == "" {

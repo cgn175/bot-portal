@@ -369,8 +369,10 @@ func (r *Router) discoverModels(config *models.AuthConfig) (*modelsResponse, str
 		if err != nil {
 			continue
 		}
+		// Get auth header without logging the actual token
 		authHeaderName, authHeaderValue := provider.GetAuthHeader(providerID, token)
-		log.Printf("[discover-models] setting %s header for %s: %s... (length: %d)", authHeaderName, config.ID, token[:min(10, len(token))], len(authHeaderValue))
+		// Log only the header name and token length, never the token value
+		log.Printf("[discover-models] setting %s header for %s (token length: %d)", authHeaderName, config.ID, len(authHeaderValue))
 		req.Header.Set(authHeaderName, authHeaderValue)
 		req.Header.Set("Accept", "application/json")
 
