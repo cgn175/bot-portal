@@ -463,6 +463,7 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 	containerConfig := &container.Config{
 		Image:        imageID,
 		Env:          envVars,
+		User:         "root", // Run as root to allow writing to bind-mounted volumes
 		ExposedPorts: nat.PortSet{containerPort: struct{}{}},
 	}
 
@@ -486,40 +487,39 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 		hostConfigPath = filepath.Join(hostPrefix, filepath.Base(configPath))
 	}
 	absConfigPath, _ := filepath.Abs(hostConfigPath)
-	absProjectsPath := ZEROCLAW_WORK_DIR + "/workspace/projects"
-	// On some systems (like macOS with Podman), if the file doesn't exist on the host,
-	// Docker/Podman might create it as a directory. We ensure it's a file above.
-	// We also use Mounts instead of Binds for more explicit control if needed,
-	// but Binds is usually fine if the host path exists.
+
+	// Build mount list
+	mounts := []mount.Mount{
+		{
+			Type:     mount.TypeBind,
+			Source:   absConfigPath,
+			Target:   ZEROCLAW_WORK_DIR + "/.zeroclaw/config.toml",
+			ReadOnly: false,
+		},
+		{
+			Type:   mount.TypeVolume,
+			Source: fmt.Sprintf("bot-portal-agent-%s-workspace", config.AgentID),
+			Target: ZEROCLAW_WORK_DIR + "/workspace",
+		},
+	}
+
+	// Add shared volume mount if SHARED_VOLUME_HOST_PATH is configured.
+	// This bind-mounts a host directory into all agent containers at a shared path.
+	if sharedPath := os.Getenv("SHARED_VOLUME_HOST_PATH"); sharedPath != "" {
+		mounts = append(mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   sharedPath,
+			Target:   ZEROCLAW_WORK_DIR + "/workspace/shared",
+			ReadOnly: false,
+		})
+	}
+
 	hostConfig := &container.HostConfig{
 		NetworkMode:     container.NetworkMode(selectedNetwork),
 		ExtraHosts:      []string{"host.docker.internal:host-gateway"},
 		PortBindings:    portBindings,
 		PublishAllPorts: false,
-		Mounts: []mount.Mount{
-			{
-				Type:     mount.TypeBind,
-				Source:   absConfigPath,
-				Target:   ZEROCLAW_WORK_DIR + "/.zeroclaw/config.toml",
-				ReadOnly: false,
-			},
-			{
-				Type:   mount.TypeVolume,
-				Source: fmt.Sprintf("bot-portal-agent-%s-workspace", config.AgentID),
-				Target: ZEROCLAW_WORK_DIR + "/workspace",
-			},
-			{
-				Type:     mount.TypeBind,
-				Source:   "/projects",
-				Target:   absProjectsPath,
-				ReadOnly: false,
-			},
-		},
-	}
-
-	if err := os.Chown(absProjectsPath, 65534, 65534); err != nil {
-		// Log but don't fail - the file is still usable with 0600 permissions
-		// This is expected when running as non-root
+		Mounts:          mounts,
 	}
 
 	// Network config

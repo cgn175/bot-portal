@@ -15,6 +15,7 @@ services:
       - AGENT_CONFIG_DIR=/app/agent-configs
       - AGENT_CONFIG_DIR_HOST=${PWD}/agent-configs
       - ENCRYPTION_KEY=7efc6f9f246692c44bc77b52404ba940
+      - SHARED_VOLUME_HOST_PATH=${SHARED_VOLUME_HOST_PATH:-}
     volumes:
       - ./db:/app/db
       - /var/run/docker.sock:/var/run/docker.sock

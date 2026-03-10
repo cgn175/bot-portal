@@ -239,6 +239,14 @@ func buildDefaultAgentsMD(agentID string, peers []peerEntry) string {
 		sb.WriteString("\n")
 	}
 
+	sb.WriteString("## Shared Workspace\n\n")
+	sb.WriteString("A shared directory may be available at `" + docker.ZEROCLAW_WORK_DIR + "/workspace/shared`.\n")
+	sb.WriteString("All agents have read/write access to this directory. Use it to:\n\n")
+	sb.WriteString("- Share files, data, and artifacts between agents.\n")
+	sb.WriteString("- Collaborate on shared projects.\n")
+	sb.WriteString("- Exchange outputs that other agents need as inputs.\n\n")
+	sb.WriteString("**Note:** Check if the directory exists before using it — it is only available when configured by the portal administrator.\n\n")
+
 	sb.WriteString("## Important Notes\n\n")
 	sb.WriteString("- Messages are asynchronous — responses arrive via your A2A channel.\n")
 	sb.WriteString("- Your memory system preserves conversation context across async turns.\n")
