@@ -3,9 +3,28 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 
 	_ "modernc.org/sqlite"
 )
+
+// validIdentifierPattern matches valid SQL identifiers (alphanumeric and underscores only)
+// This prevents SQL injection in ALTER TABLE statements
+var validIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// allowedTables is a whitelist of tables that can be altered during migrations
+var allowedTables = map[string]bool{
+	"agents": true,
+	"models": true,
+}
+
+// validateIdentifier checks if a table or column name is safe to use in SQL
+func validateIdentifier(name string) error {
+	if !validIdentifierPattern.MatchString(name) {
+		return fmt.Errorf("invalid identifier: %q (must match [a-zA-Z_][a-zA-Z0-9_]*)", name)
+	}
+	return nil
+}
 
 // NewSQLite creates a new SQLite database connection
 func NewSQLite(path string) (*sql.DB, error) {
@@ -143,9 +162,19 @@ func RunMigrations(db *sql.DB) error {
 		{"agents", "peer_agent_ids", "TEXT DEFAULT '[]'"},
 	}
 	for _, m := range alterMigrations {
+		// Security: Validate table name against whitelist
+		if !allowedTables[m.table] {
+			return fmt.Errorf("migration error: table %q is not in allowed list", m.table)
+		}
+		// Security: Validate column name to prevent SQL injection
+		if err := validateIdentifier(m.column); err != nil {
+			return fmt.Errorf("migration error: %w", err)
+		}
+
 		var count int
 		err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, m.table, m.column).Scan(&count)
 		if err == nil && count == 0 {
+			// Safe to use fmt.Sprintf here because we've validated identifiers
 			_, _ = db.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, m.table, m.column, m.definition))
 		}
 	}
