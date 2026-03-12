@@ -105,26 +105,7 @@ func (r *Router) handleChatCompletions(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	// Check if this is a Claude model
-	if isClaudeModel(model.ModelIdentifier) {
-		log.Printf("[Adaptive Chat] Detected Claude model: %s", model.ModelIdentifier)
-
-		// Transform OpenAI → Claude
-		claudeReq := transformToClaudeFormat(chatReq)
-
-		log.Printf("[Format Transform] OpenAI → Claude: system=%v, messages=%d",
-			len(claudeReq.System) > 0, len(claudeReq.Messages))
-
-		// TODO: Proxy as Claude request
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotImplemented)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Claude model proxy not yet implemented",
-		})
-		return
-	}
-
-	log.Printf("[Adaptive Chat] Using OpenAI format for model: %s", model.ModelIdentifier)
+	log.Printf("[Adaptive Chat] Using OpenAI-compatible proxy for model: %s", model.ModelIdentifier)
 
 	// Inject system prompt if requested
 	messages := chatReq.Messages

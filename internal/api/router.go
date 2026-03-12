@@ -30,6 +30,8 @@ type Router struct {
 	a2aRouter          *a2a.Router
 	skipModelDiscovery bool // For testing: skip async model discovery
 
+	bgWg sync.WaitGroup // tracks background goroutines for graceful shutdown
+
 	// SSE connections for frontend task streaming
 	taskStreamMu    sync.RWMutex
 	taskStreamConns map[string]map[string]chan *a2a.TaskUpdate // taskID -> addr -> channel
@@ -87,6 +89,11 @@ func NewRouter(db *sql.DB, dockerMgr *docker.Manager) *Router {
 	}
 
 	return router
+}
+
+// Shutdown waits for all background tasks to complete.
+func (r *Router) Shutdown() {
+	r.bgWg.Wait()
 }
 
 // Run starts the HTTP server

@@ -237,7 +237,9 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 	// Auto-discover and save models from copilot
 	// Fetch from store to get decrypted credentials, then run discovery async
 	if !r.skipModelDiscovery {
+		r.bgWg.Add(1)
 		go func(id string) {
+			defer r.bgWg.Done()
 			cfg, err := r.authConfigStore.GetByID(id)
 			if err != nil || cfg == nil {
 				log.Printf("[model-discovery] failed to get copilot auth config %s: %v", id, err)

@@ -133,7 +133,9 @@ func (r *Router) createAuthConfig(w http.ResponseWriter, req *http.Request) {
 	// Auto-discover and save models from this provider
 	// Fetch from store to get decrypted credentials, then run discovery async
 	if !r.skipModelDiscovery {
+		r.bgWg.Add(1)
 		go func(configID string) {
+			defer r.bgWg.Done()
 			log.Printf("[model-discovery] goroutine started for %s", configID)
 			cfg, err := r.authConfigStore.GetByID(configID)
 			if err != nil {
@@ -238,7 +240,9 @@ func (r *Router) updateAuthConfig(w http.ResponseWriter, req *http.Request, conf
 	// Auto-discover and save models from this provider
 	// Fetch from store to get decrypted credentials, then run discovery async
 	if !r.skipModelDiscovery {
+		r.bgWg.Add(1)
 		go func(configID string) {
+			defer r.bgWg.Done()
 			log.Printf("[model-discovery] goroutine started for %s", configID)
 			cfg, err := r.authConfigStore.GetByID(configID)
 			if err != nil {

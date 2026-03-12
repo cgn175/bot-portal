@@ -60,9 +60,10 @@ func TestHandleChatCompletions_ClaudeModel(t *testing.T) {
 
 	router.handleChatCompletions(w, req)
 
-	// For now, expect 501 (transformation logic not yet implemented)
-	if w.Code != http.StatusNotImplemented {
-		t.Errorf("status code: got %d, want %d", w.Code, http.StatusNotImplemented)
+	// Claude models now fall through to the standard OpenAI-compatible proxy path,
+	// so we should NOT get 501 Not Implemented.
+	if w.Code == http.StatusNotImplemented {
+		t.Errorf("Claude model should not return 501; got %d", w.Code)
 	}
 }
 

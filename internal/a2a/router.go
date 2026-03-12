@@ -26,6 +26,12 @@ type Router struct {
 	// HTTP client for forwarding tasks to agents
 	client *http.Client
 
+	// HTTP client for SSE streaming (no timeout)
+	sseClient *http.Client
+
+	// Semaphore to limit concurrent outgoing requests
+	sendSem chan struct{}
+
 	// SSE connections for streaming
 	connections map[string]map[string]chan *TaskUpdate
 	mu          sync.RWMutex
@@ -45,6 +51,10 @@ func NewRouter() *Router {
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		sseClient: &http.Client{
+			Timeout: 0,
+		},
+		sendSem:     make(chan struct{}, 10),
 		connections: make(map[string]map[string]chan *TaskUpdate),
 	}
 }
@@ -293,7 +303,12 @@ func (r *Router) forwardTask(channelID, senderID, taskID string, req CreateTaskR
 			continue
 		}
 
-		go r.sendTaskToAgent(&agent, taskID, req)
+		agent := agent // capture loop variable
+		r.sendSem <- struct{}{}
+		go func() {
+			defer func() { <-r.sendSem }()
+			r.sendTaskToAgent(&agent, taskID, req)
+		}()
 	}
 }
 
@@ -348,8 +363,8 @@ func (r *Router) subscribeToAgentStream(agent *AgentInfo, taskID string) {
 	req.Header.Set("Authorization", "Bearer "+agent.BearerToken)
 	req.Header.Set("Accept", "text/event-stream")
 
-	// Make the request
-	resp, err := r.client.Do(req)
+	// Make the request using the SSE client (no timeout)
+	resp, err := r.sseClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to connect to SSE stream for task %s: %v", taskID, err)
 		return

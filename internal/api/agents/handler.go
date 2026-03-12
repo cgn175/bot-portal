@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -367,13 +368,41 @@ func (h *Handler) updateAgent(w http.ResponseWriter, req *http.Request, agentID 
 		return
 	}
 
-	// Apply updates
+	needsConfigRegen, err := h.applyAgentUpdates(agent, updates, req.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// If peers changed, sync symmetric relationships and regenerate configs
+	if needsConfigRegen {
+		var newPeerIDs []string
+		json.Unmarshal(agent.PeerAgentIDs, &newPeerIDs)
+		h.syncSymmetricPeers(agentID, oldPeerIDs, newPeerIDs)
+
+		// Regenerate this agent's own config if running
+		if agent.Status == "running" && agent.ContainerID != "" {
+			if err := h.regenerateAgentConfig(agent); err != nil {
+				fmt.Printf("Warning: failed to sync peers config for %s: %v\n", agentID, err)
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(agent)
+}
+
+// applyAgentUpdates applies field updates to an agent, handles container cleanup
+// when infrastructure-affecting fields change, and persists the result.
+// It returns whether peer config regeneration is needed and any error.
+func (h *Handler) applyAgentUpdates(agent *store.Agent, updates map[string]interface{}, ctx context.Context) (needsConfigRegen bool, err error) {
 	if name, ok := updates["name"].(string); ok {
 		agent.Name = name
 	}
 	if desc, ok := updates["description"].(string); ok {
 		agent.Description = desc
 	}
+
 	needsNewContainer := false
 	if img, ok := updates["image"].(string); ok && img != agent.Image {
 		agent.Image = img
@@ -383,7 +412,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, req *http.Request, agentID 
 		agent.Endpoint = ep
 		needsNewContainer = true
 		// Re-derive listen port from the new endpoint
-		if u, err := url.Parse(ep); err == nil {
+		if u, parseErr := url.Parse(ep); parseErr == nil {
 			if p := u.Port(); p != "" {
 				agent.ListenPort, _ = strconv.Atoi(p)
 			}
@@ -392,8 +421,8 @@ func (h *Handler) updateAgent(w http.ResponseWriter, req *http.Request, agentID 
 		// Switching to docker, ensure endpoint is 127.0.0.1
 		if agent.ListenPort == 0 {
 			count := 0
-			agents, err := h.AgentStore.List()
-			if err == nil {
+			agents, listErr := h.AgentStore.List()
+			if listErr == nil {
 				count = len(agents)
 			}
 			agent.ListenPort = 17000 + count
@@ -423,7 +452,6 @@ func (h *Handler) updateAgent(w http.ResponseWriter, req *http.Request, agentID 
 
 	// Remove stale container so startAgent creates a fresh one
 	if needsNewContainer && agent.ContainerID != "" {
-		ctx := req.Context()
 		h.DockerMgr.StopContainer(ctx, agent.ContainerID)
 		h.DockerMgr.RemoveContainer(ctx, agent.ContainerID)
 		agent.ContainerID = ""
@@ -434,26 +462,11 @@ func (h *Handler) updateAgent(w http.ResponseWriter, req *http.Request, agentID 
 	}
 
 	if err := h.AgentStore.Update(agent); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return false, err
 	}
 
-	// If peers changed, sync symmetric relationships and regenerate configs
-	if _, ok := updates["peerAgentIds"]; ok {
-		var newPeerIDs []string
-		json.Unmarshal(agent.PeerAgentIDs, &newPeerIDs)
-		h.syncSymmetricPeers(agentID, oldPeerIDs, newPeerIDs)
-
-		// Regenerate this agent's own config if running
-		if agent.Status == "running" && agent.ContainerID != "" {
-			if err := h.regenerateAgentConfig(agent); err != nil {
-				fmt.Printf("Warning: failed to sync peers config for %s: %v\n", agentID, err)
-			}
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(agent)
+	_, peersChanged := updates["peerAgentIds"]
+	return peersChanged, nil
 }
 
 func (h *Handler) deleteAgent(w http.ResponseWriter, req *http.Request, agentID string) {

@@ -174,6 +174,7 @@ type ContainerConfig struct {
 	AgentDesc    string
 	ModelConfig  *ModelConfig
 	AuthConfig   *AuthConfig
+	SecureMode   bool // When true, skip injecting API keys as env vars (use mounted config instead)
 }
 
 // A2APeer holds peer info for config generation
@@ -223,33 +224,36 @@ func buildEnvironmentVars(config ContainerConfig) []string {
 		if config.AuthConfig.Endpoint != "" {
 			envVars = append(envVars, fmt.Sprintf("AUTH_ENDPOINT=%s", config.AuthConfig.Endpoint))
 		}
-		if config.AuthConfig.ApiKey != "" {
-			envVars = append(envVars, fmt.Sprintf("API_KEY=%s", config.AuthConfig.ApiKey))
-		}
 
-		// Inject provider-specific API key environment variables
-		// Use the provider registry to determine the correct env var name
-		if config.AuthConfig.ApiKey != "" {
-			envVarName := provider.GetAPIKeyEnvVar(config.AuthConfig.Type)
-			if envVarName != "API_KEY" {
-				envVars = append(envVars, fmt.Sprintf("%s=%s", envVarName, config.AuthConfig.ApiKey))
+		if !config.SecureMode {
+			if config.AuthConfig.ApiKey != "" {
+				envVars = append(envVars, fmt.Sprintf("API_KEY=%s", config.AuthConfig.ApiKey))
 			}
-		}
 
-		// Also inject based on model provider if available
-		if config.ModelConfig != nil && config.ModelConfig.Provider != "" {
-			envVarName := provider.GetAPIKeyEnvVar(config.ModelConfig.Provider)
-			if envVarName != "API_KEY" && config.AuthConfig.ApiKey != "" {
-				// Only add if not already added
-				found := false
-				for _, env := range envVars {
-					if len(env) > len(envVarName) && env[:len(envVarName)] == envVarName {
-						found = true
-						break
-					}
-				}
-				if !found {
+			// Inject provider-specific API key environment variables
+			// Use the provider registry to determine the correct env var name
+			if config.AuthConfig.ApiKey != "" {
+				envVarName := provider.GetAPIKeyEnvVar(config.AuthConfig.Type)
+				if envVarName != "API_KEY" {
 					envVars = append(envVars, fmt.Sprintf("%s=%s", envVarName, config.AuthConfig.ApiKey))
+				}
+			}
+
+			// Also inject based on model provider if available
+			if config.ModelConfig != nil && config.ModelConfig.Provider != "" {
+				envVarName := provider.GetAPIKeyEnvVar(config.ModelConfig.Provider)
+				if envVarName != "API_KEY" && config.AuthConfig.ApiKey != "" {
+					// Only add if not already added
+					found := false
+					for _, env := range envVars {
+						if len(env) > len(envVarName) && env[:len(envVarName)] == envVarName {
+							found = true
+							break
+						}
+					}
+					if !found {
+						envVars = append(envVars, fmt.Sprintf("%s=%s", envVarName, config.AuthConfig.ApiKey))
+					}
 				}
 			}
 		}
