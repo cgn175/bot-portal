@@ -33,8 +33,8 @@ export interface TaskLog {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   direction: 'inbound' | 'outbound'
   messages?: Message[]
-  created_at: string
-  updated_at?: string
+  createdAt: string
+  updatedAt?: string
 }
 
 export interface CreateAgentRequest {

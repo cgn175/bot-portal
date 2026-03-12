@@ -59,8 +59,11 @@ func (s *ChannelStore) GetByID(id string) (*models.Channel, error) {
 // List retrieves all channels
 func (s *ChannelStore) List() ([]*models.Channel, error) {
 	rows, err := s.db.Query(`
-		SELECT id, members, created_at
-		FROM channels`)
+		SELECT c.id, c.members, c.created_at
+		FROM channels c
+		LEFT JOIN task_logs t ON c.id = t.channel_id
+		GROUP BY c.id
+		ORDER BY COALESCE(MAX(t.created_at), c.created_at) DESC`)
 	if err != nil {
 		return nil, err
 	}

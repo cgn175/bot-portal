@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -215,7 +216,8 @@ func (h *Handler) validateAndExtractAgentID(path string) (string, error) {
 func (h *Handler) listAgents(w http.ResponseWriter, req *http.Request) {
 	agents, err := h.AgentStore.List()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] listAgents: %v", err)
+		http.Error(w, "Failed to list agents", http.StatusInternalServerError)
 		return
 	}
 
@@ -237,7 +239,8 @@ func (h *Handler) createAgent(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if err := json.NewDecoder(req.Body).Decode(&agent); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("[error] createAgent decode: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -331,7 +334,8 @@ func (h *Handler) createAgent(w http.ResponseWriter, req *http.Request) {
 func (h *Handler) getAgent(w http.ResponseWriter, req *http.Request, agentID string) {
 	agent, err := h.AgentStore.GetByID(agentID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] getAgent %s: %v", agentID, err)
+		http.Error(w, "Failed to get agent", http.StatusInternalServerError)
 		return
 	}
 	if agent == nil {
@@ -358,7 +362,8 @@ func (h *Handler) updateAgent(w http.ResponseWriter, req *http.Request, agentID 
 
 	var updates map[string]interface{}
 	if err := json.NewDecoder(req.Body).Decode(&updates); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("[error] updateAgent decode %s: %v", agentID, err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -471,7 +476,8 @@ func (h *Handler) deleteAgent(w http.ResponseWriter, req *http.Request, agentID 
 	}
 
 	if err := h.AgentStore.Delete(agentID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] deleteAgent %s: %v", agentID, err)
+		http.Error(w, "Failed to delete agent", http.StatusInternalServerError)
 		return
 	}
 

@@ -401,7 +401,7 @@ function flattenMessages(taskLogs: TaskLog[]): BubbleData[] {
           role: m.role === 'user' ? 'user' : 'agent',
           senderId: m.role === 'user' ? (log.sender_id || 'user') : (log.recipient_id || log.sender_id || 'agent'),
           content: m.content,
-          timestamp: log.created_at,
+          timestamp: log.createdAt,
           status: log.status,
           direction: log.direction,
         })
@@ -412,7 +412,7 @@ function flattenMessages(taskLogs: TaskLog[]): BubbleData[] {
         role: log.direction === 'outbound' ? 'user' : 'agent',
         senderId: log.sender_id,
         content: `[${log.status}] Task from ${log.sender_id}`,
-        timestamp: log.created_at,
+        timestamp: log.createdAt,
         status: log.status,
         direction: log.direction,
       })
@@ -422,8 +422,11 @@ function flattenMessages(taskLogs: TaskLog[]): BubbleData[] {
   return bubbles
 }
 
-function formatTime(timestamp: string): string {
+function formatTime(timestamp: string | undefined): string {
+  if (!timestamp) return 'Unknown time'
   const date = new Date(timestamp)
+  if (isNaN(date.getTime())) return 'Unknown time'
+
   const now = new Date()
   const isToday = date.toDateString() === now.toDateString()
 
@@ -448,8 +451,8 @@ function calculateResponseTime(messages: TaskLog[]): string | null {
   let count = 0
 
   for (let i = 1; i < messages.length; i++) {
-    const prev = new Date(messages[i - 1].created_at).getTime()
-    const curr = new Date(messages[i].created_at).getTime()
+    const prev = new Date(messages[i - 1].createdAt).getTime()
+    const curr = new Date(messages[i].createdAt).getTime()
     const diff = curr - prev
     if (diff > 0 && diff < 3600000) { // ignore gaps > 1 hour
       totalDiff += diff

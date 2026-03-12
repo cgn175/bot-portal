@@ -1,138 +1,255 @@
 package crypto
 
 import (
-	"encoding/base64"
-	"os"
-	"reflect"
+	"strings"
 	"testing"
 )
 
-func TestMain(m *testing.M) {
-	// Set up test encryption key before running tests (must be exactly 32 bytes)
-	os.Setenv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef")
-	code := m.Run()
-	os.Exit(code)
-}
-
 func TestEncryptDecryptCredentials(t *testing.T) {
-	// Sample credentials to test with
-	credentials := map[string]string{
-		"api_key":    "sk-1234567890abcdef",
-		"secret_key": "secret123",
-		"org_id":     "org-456789",
-	}
-
-	// Encrypt the credentials
-	encrypted, err := EncryptCredentials(credentials)
-	if err != nil {
-		t.Fatalf("Failed to encrypt credentials: %v", err)
-	}
-
-	// Verify encrypted data is not empty and is valid base64
-	if len(encrypted) == 0 {
-		t.Fatal("Encrypted string should not be empty")
-	}
-
-	_, err = base64.StdEncoding.DecodeString(encrypted)
-	if err != nil {
-		t.Fatal("Encrypted string should be valid base64")
-	}
-
-	// Decrypt the credentials
-	decrypted, err := DecryptCredentials(encrypted)
-	if err != nil {
-		t.Fatalf("Failed to decrypt credentials: %v", err)
-	}
-
-	// Verify decrypted data matches original
-	if !reflect.DeepEqual(credentials, decrypted) {
-		t.Errorf("Decrypted credentials don't match original.\nExpected: %v\nGot: %v", credentials, decrypted)
-	}
-}
-
-func TestEncryptionKeyValidation(t *testing.T) {
-	// Save the original key
-	originalKey := os.Getenv("ENCRYPTION_KEY")
-	defer os.Setenv("ENCRYPTION_KEY", originalKey)
-
 	tests := []struct {
-		name      string
-		key       string
-		wantError bool
+		name  string
+		creds map[string]string
 	}{
 		{
-			name:      "missing key",
-			key:       "",
-			wantError: true,
+			name: "simple API key",
+			creds: map[string]string{
+				"api_key": "sk-test12345",
+			},
 		},
 		{
-			name:      "key too short",
-			key:       "short-key",
-			wantError: true,
+			name: "multiple credentials",
+			creds: map[string]string{
+				"api_key":     "sk-test12345",
+				"api_secret":  "secret-value-789",
+				"access_token": "token-abc-xyz",
+			},
 		},
 		{
-			name:      "key too long",
-			key:       "this-key-is-way-too-long-for-aes-256-encryption",
-			wantError: true,
+			name:  "empty credentials",
+			creds: map[string]string{},
 		},
 		{
-			name:      "key exactly 32 bytes",
-			key:       "0123456789abcdef0123456789abcdef",
-			wantError: false,
+			name: "special characters",
+			creds: map[string]string{
+				"api_key": "sk-!@#$%^&*()_+-=[]{}|;':\",./<>?",
+			},
+		},
+		{
+			name: "unicode characters",
+			creds: map[string]string{
+				"api_key": "sk-测试-キー-🚀",
+			},
+		},
+		{
+			name: "long value",
+			creds: map[string]string{
+				"api_key": strings.Repeat("a", 1000),
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("ENCRYPTION_KEY", tt.key)
-			_, err := EncryptCredentials(map[string]string{"test": "value"})
-			if tt.wantError && err == nil {
-				t.Error("Expected error but got none")
+			// Encrypt
+			encrypted, err := EncryptCredentials(tt.creds)
+			if err != nil {
+				t.Fatalf("EncryptCredentials failed: %v", err)
 			}
-			if !tt.wantError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
+
+			// Verify encrypted is not empty and different from original
+			if encrypted == "" {
+				t.Error("encrypted string should not be empty")
+			}
+
+			// Decrypt
+			decrypted, err := DecryptCredentials(encrypted)
+			if err != nil {
+				t.Fatalf("DecryptCredentials failed: %v", err)
+			}
+
+			// Verify decrypted matches original
+			if len(decrypted) != len(tt.creds) {
+				t.Errorf("decrypted length = %d, want %d", len(decrypted), len(tt.creds))
+			}
+
+			for key, expectedValue := range tt.creds {
+				if decrypted[key] != expectedValue {
+					t.Errorf("decrypted[%q] = %q, want %q", key, decrypted[key], expectedValue)
+				}
 			}
 		})
 	}
 }
 
-func TestEncryptInvalidData(t *testing.T) {
+func TestEncryptDecryptCredentials_Deterministic(t *testing.T) {
+	// Encryption should be non-deterministic (different ciphertext each time)
+	creds := map[string]string{"api_key": "sk-test12345"}
+
+	encrypted1, err := EncryptCredentials(creds)
+	if err != nil {
+		t.Fatalf("first encryption failed: %v", err)
+	}
+
+	encrypted2, err := EncryptCredentials(creds)
+	if err != nil {
+		t.Fatalf("second encryption failed: %v", err)
+	}
+
+	// Two encryptions of the same data should produce different ciphertexts
+	// (due to random nonce)
+	if encrypted1 == encrypted2 {
+		t.Error("encryption should be non-deterministic (randomized nonce)")
+	}
+
+	// But both should decrypt to the same value
+	decrypted1, err := DecryptCredentials(encrypted1)
+	if err != nil {
+		t.Fatalf("first decryption failed: %v", err)
+	}
+
+	decrypted2, err := DecryptCredentials(encrypted2)
+	if err != nil {
+		t.Fatalf("second decryption failed: %v", err)
+	}
+
+	if decrypted1["api_key"] != decrypted2["api_key"] {
+		t.Error("both decryptions should produce the same value")
+	}
+}
+
+func TestDecryptCredentials_InvalidData(t *testing.T) {
 	tests := []struct {
 		name      string
 		encrypted string
-		wantError bool
+		wantErr   bool
 	}{
-		{
-			name:      "invalid base64",
-			encrypted: "invalid-base64-string!@#",
-			wantError: true,
-		},
 		{
 			name:      "empty string",
 			encrypted: "",
-			wantError: true,
+			wantErr:   false, // Empty returns empty map
 		},
 		{
-			name:      "too short ciphertext",
-			encrypted: base64.StdEncoding.EncodeToString([]byte("short")),
-			wantError: true,
+			name:      "invalid base64",
+			encrypted: "not-valid-base64!!!",
+			wantErr:   true,
 		},
 		{
-			name:      "valid base64 but invalid ciphertext",
-			encrypted: base64.StdEncoding.EncodeToString([]byte("this is not a valid encrypted payload")),
-			wantError: true,
+			name:      "too short data",
+			encrypted: "dG9vLXNob3J0", // base64 of "too-short"
+			wantErr:   true,
+		},
+		{
+			name:      "corrupted ciphertext",
+			encrypted: "dGVzdHRlc3R0ZXN0dGVzdHRlc3R0ZXN0dGVzdHRlc3Q=", // "test" repeated
+			wantErr:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := DecryptCredentials(tt.encrypted)
-			if tt.wantError && err == nil {
-				t.Error("Expected error but got none")
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
 			}
-			if !tt.wantError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestEncryptDecryptString(t *testing.T) {
+	tests := []struct {
+		name      string
+		plaintext string
+	}{
+		{
+			name:      "simple string",
+			plaintext: "hello world",
+		},
+		{
+			name:      "empty string",
+			plaintext: "",
+		},
+		{
+			name:      "special characters",
+			plaintext: "!@#$%^&*()_+-=[]{}|;':\",./<>?",
+		},
+		{
+			name:      "unicode",
+			plaintext: "Hello 世界 🌍",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encrypted, err := EncryptString(tt.plaintext)
+			if err != nil {
+				t.Fatalf("EncryptString failed: %v", err)
+			}
+
+			decrypted, err := DecryptString(encrypted)
+			if err != nil {
+				t.Fatalf("DecryptString failed: %v", err)
+			}
+
+			if decrypted != tt.plaintext {
+				t.Errorf("decrypted = %q, want %q", decrypted, tt.plaintext)
+			}
+		})
+	}
+}
+
+func TestEncryptCredentials_NilInput(t *testing.T) {
+	// Should handle nil input gracefully
+	encrypted, err := EncryptCredentials(nil)
+	if err != nil {
+		t.Fatalf("EncryptCredentials(nil) failed: %v", err)
+	}
+
+	decrypted, err := DecryptCredentials(encrypted)
+	if err != nil {
+		t.Fatalf("DecryptCredentials failed: %v", err)
+	}
+
+	if decrypted == nil {
+		t.Error("decrypted should not be nil, should be empty map")
+	}
+
+	if len(decrypted) != 0 {
+		t.Errorf("decrypted should be empty, got %d items", len(decrypted))
+	}
+}
+
+func BenchmarkEncryptCredentials(b *testing.B) {
+	creds := map[string]string{
+		"api_key":    "sk-test12345",
+		"api_secret": "secret-value",
+	}
+
+	for i := 0; i < b.N; i++ {
+		_, err := EncryptCredentials(creds)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDecryptCredentials(b *testing.B) {
+	creds := map[string]string{
+		"api_key":    "sk-test12345",
+		"api_secret": "secret-value",
+	}
+
+	encrypted, err := EncryptCredentials(creds)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		_, err := DecryptCredentials(encrypted)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }

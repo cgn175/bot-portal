@@ -42,9 +42,14 @@ func (r *Router) handleCopilotKitInfo(w http.ResponseWriter, req *http.Request) 
 // Model Resolution
 // ============================================================================
 
-// resolveModel resolves the model to use for a chat request.
-// Fallback chain: requested model → settings.DefaultModel → COPILOT_DEFAULT_MODEL_ID env → is_default flag → first model → error
 func (r *Router) resolveModel(requestedModel string) (*models.Model, error) {
+	if requestedModel != "" {
+		model, err := r.modelStore.GetByID(requestedModel)
+		if err == nil && model != nil {
+			return model, nil
+		}
+	}
+
 	model, err := r.modelStore.GetDefault()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get default model: %v", err)

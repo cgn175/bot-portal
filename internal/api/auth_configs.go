@@ -55,7 +55,8 @@ func (r *Router) listAuthConfigs(w http.ResponseWriter, req *http.Request) {
 	// Use ListMasked to get configs with credentials masked for API responses
 	configs, err := r.authConfigStore.ListMasked()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] listAuthConfigs: %v", err)
+		http.Error(w, "Failed to list auth configs", http.StatusInternalServerError)
 		return
 	}
 
@@ -77,7 +78,8 @@ func (r *Router) createAuthConfig(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if err := json.NewDecoder(req.Body).Decode(&requestConfig); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Printf("[error] createAuthConfig decode: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -176,7 +178,8 @@ func (r *Router) getAuthConfig(w http.ResponseWriter, req *http.Request, configI
 func (r *Router) updateAuthConfig(w http.ResponseWriter, req *http.Request, configID string) {
 	config, err := r.authConfigStore.GetByID(configID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] updateAuthConfig getConfig %s: %v", configID, err)
+		http.Error(w, "Failed to get auth config", http.StatusInternalServerError)
 		return
 	}
 	if config == nil {
@@ -224,10 +227,11 @@ func (r *Router) updateAuthConfig(w http.ResponseWriter, req *http.Request, conf
 	if err := r.authConfigStore.Update(config); err != nil {
 		// Check for not found error
 		if errors.Is(err, store.ErrNotFound) || strings.Contains(err.Error(), "not found") {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			http.Error(w, "Auth config not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] updateAuthConfig store %s: %v", configID, err)
+		http.Error(w, "Failed to update auth config", http.StatusInternalServerError)
 		return
 	}
 

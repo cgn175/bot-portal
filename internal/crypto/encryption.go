@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -25,91 +26,113 @@ func getKey() ([]byte, error) {
 	return keyBytes, nil
 }
 
-// EncryptCredentials encrypts a map of credentials using AES-256-GCM and returns base64 encoded string
-func EncryptCredentials(creds map[string]string) (string, error) {
-	// Convert credentials map to JSON
-	jsonData, err := json.Marshal(creds)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal credentials: %w", err)
-	}
-
-	// Create AES cipher
+// encrypt encrypts plaintext using AES-256-GCM.
+// Returns a base64-encoded string containing the nonce and ciphertext.
+func encrypt(plaintext []byte) (string, error) {
 	key, err := getKey()
 	if err != nil {
 		return "", err
 	}
+	
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
-
-	// Create GCM mode
+	
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
-
-	// Generate random nonce
+	
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
-
-	// Encrypt the data
-	ciphertext := gcm.Seal(nil, nonce, jsonData, nil)
-
-	// Prepend nonce to ciphertext
-	encrypted := append(nonce, ciphertext...)
-
-	// Return base64 encoded result
-	return base64.StdEncoding.EncodeToString(encrypted), nil
+	
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-// DecryptCredentials decrypts a base64 encoded string back to credentials map using AES-256-GCM
-func DecryptCredentials(encrypted string) (map[string]string, error) {
-	// Decode base64
+// decrypt decrypts a base64-encoded ciphertext using AES-256-GCM.
+// Returns the original plaintext bytes.
+func decrypt(encrypted string) ([]byte, error) {
+	if encrypted == "" {
+		return nil, nil
+	}
+	
 	data, err := base64.StdEncoding.DecodeString(encrypted)
 	if err != nil {
-		return nil, fmt.Errorf("invalid base64 encoding: %w", err)
+		return nil, fmt.Errorf("failed to decode base64: %w", err)
 	}
-
-	// Create AES cipher
+	
 	key, err := getKey()
 	if err != nil {
 		return nil, err
 	}
+	
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
-
-	// Create GCM mode
+	
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}
-
-	// Check if data is long enough to contain nonce
+	
 	nonceSize := gcm.NonceSize()
 	if len(data) < nonceSize {
 		return nil, fmt.Errorf("ciphertext too short")
 	}
+	
+	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
 
-	// Extract nonce and ciphertext
-	nonce := data[:nonceSize]
-	ciphertext := data[nonceSize:]
-
-	// Decrypt the data
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt: %w", err)
+// EncryptCredentials encrypts a map of credentials
+func EncryptCredentials(creds map[string]string) (string, error) {
+	if creds == nil {
+		creds = make(map[string]string)
 	}
+	data, err := json.Marshal(creds)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal credentials: %w", err)
+	}
+	return encrypt(data)
+}
 
-	// Unmarshal JSON back to map
-	var creds map[string]string
+// DecryptCredentials decrypts a base64-encoded ciphertext back to a credentials map
+func DecryptCredentials(encrypted string) (map[string]string, error) {
+	creds := make(map[string]string)
+	if encrypted == "" {
+		return creds, nil
+	}
+	
+	plaintext, err := decrypt(encrypted)
+	if err != nil {
+		return nil, err
+	}
+	
 	if err := json.Unmarshal(plaintext, &creds); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
 	}
-
 	return creds, nil
+}
+
+// EncryptString encrypts a plain string using AES-256-GCM
+// Returns a base64-encoded string.
+func EncryptString(plaintext string) (string, error) {
+	return encrypt([]byte(plaintext))
+}
+
+// DecryptString decrypts a base64-encoded ciphertext to a plain string.
+func DecryptString(encrypted string) (string, error) {
+	if encrypted == "" {
+		return "", nil
+	}
+	plaintext, err := decrypt(encrypted)
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
 }
