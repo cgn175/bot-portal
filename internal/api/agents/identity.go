@@ -31,7 +31,8 @@ func (h *Handler) HandleAgentIdentityFiles(w http.ResponseWriter, req *http.Requ
 
 	agent, err := h.AgentStore.GetByID(agentID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] HandleAgentIdentityFiles getAgent %s: %v", agentID, err)
+		http.Error(w, "Failed to get agent", http.StatusInternalServerError)
 		return
 	}
 	if agent == nil {
@@ -81,7 +82,7 @@ func (h *Handler) HandleAgentIdentityFileDetail(w http.ResponseWriter, req *http
 	agent, err := h.AgentStore.GetByID(agentID)
 	if err != nil {
 		log.Printf("Identity file: error looking up agent %q: %v", agentID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to get agent", http.StatusInternalServerError)
 		return
 	}
 	if agent == nil {
@@ -145,7 +146,8 @@ func (h *Handler) getIdentityFile(w http.ResponseWriter, req *http.Request, agen
 		identityFileStore := store.NewIdentityFileStore(h.DB)
 		file, err := identityFileStore.GetByAgentAndFilename(agentID, filename)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("[error] getIdentityFile from store %s/%s: %v", agentID, filename, err)
+			http.Error(w, "Failed to get identity file", http.StatusInternalServerError)
 			return
 		}
 		if file != nil {
@@ -181,13 +183,15 @@ func (h *Handler) updateIdentityFile(w http.ResponseWriter, req *http.Request, a
 	}
 
 	if err := identityFileStore.CreateOrUpdate(file); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] updateIdentityFile store %s/%s: %v", agentID, filename, err)
+		http.Error(w, "Failed to update identity file", http.StatusInternalServerError)
 		return
 	}
 
 	agent, err := h.AgentStore.GetByID(agentID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[error] updateIdentityFile getAgent %s: %v", agentID, err)
+		http.Error(w, "Failed to get agent", http.StatusInternalServerError)
 		return
 	}
 
