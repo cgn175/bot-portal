@@ -314,13 +314,6 @@ func (r *Router) discoverModels(config *models.AuthConfig) (*modelsResponse, str
 		return nil, "", "", fmt.Errorf("failed to parse credentials: %w", err)
 	}
 
-	// Debug: log available credential keys
-	var credKeys []string
-	for k := range creds {
-		credKeys = append(credKeys, k)
-	}
-	log.Printf("[discover-models] auth config %s has credential keys: %v", config.ID, credKeys)
-
 	// Determine token, baseURL, and provider based on auth type
 	var token, baseURL, providerID string
 	if config.AuthType == "github_copilot_oauth" {
@@ -344,23 +337,12 @@ func (r *Router) discoverModels(config *models.AuthConfig) (*modelsResponse, str
 	}
 
 	if token == "" {
-		log.Printf("[discover-models] no API key found for %s (checked api_key/access_token/copilot_api_key)", config.ID)
+		log.Printf("[discover-models] no API key found for %s", config.ID)
 		return nil, "", "", fmt.Errorf("no API key / token found in auth config")
 	}
 	if baseURL == "" {
 		return nil, "", "", fmt.Errorf("no endpoint URL configured")
 	}
-
-	// Debug: log token preview
-	tokenPreview := ""
-	if len(token) > 8 {
-		tokenPreview = token[:4] + "..." + token[len(token)-4:] + fmt.Sprintf("(len=%d)", len(token))
-	} else if len(token) > 0 {
-		tokenPreview = fmt.Sprintf("[short token: len=%d]", len(token))
-	} else {
-		tokenPreview = "[empty]"
-	}
-	log.Printf("[discover-models] using token for %s: %s, baseURL: %s", config.ID, tokenPreview, baseURL)
 
 	client := &http.Client{Timeout: 15 * time.Second}
 

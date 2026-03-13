@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, Model, AuthConfig } from '../api/client'
 import Alert from '../components/Alert'
+import SearchableSelect from '../components/SearchableSelect'
 
 interface Message {
   id: string
@@ -127,32 +128,20 @@ export default function TestChat() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="model-select"
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-bg-secondary)',
-              color: 'var(--color-text)',
-              fontSize: '0.9rem'
-            }}
-          >
-            <option value="">Select a model...</option>
-            {models?.map(model => {
-              const config = authConfigs?.find(c => c.id === model.authConfigId)
-              const provider = config 
-                ? (config.authType === 'github_copilot_oauth' ? 'copilot' : config.provider) 
-                : 'unknown'
-              return (
-                <option key={model.id} value={model.id}>
-                  {model.name} ({provider})
-                </option>
-              )
-            })}
-          </select>
+          <div style={{ minWidth: '250px' }}>
+            <SearchableSelect
+              value={selectedModel}
+              onChange={(value) => setSelectedModel(value)}
+              placeholder="Select a model..."
+              options={models?.map(model => {
+                const config = authConfigs?.find(c => c.id === model.authConfigId)
+                const provider = config 
+                  ? (config.authType === 'github_copilot_oauth' ? 'copilot' : config.provider) 
+                  : 'unknown'
+                return { value: model.id, label: `${model.name} (${provider})` }
+              }) || []}
+            />
+          </div>
           <button
             onClick={clearChat}
             className="btn btn-secondary"

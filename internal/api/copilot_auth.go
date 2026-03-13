@@ -99,7 +99,8 @@ func (r *Router) handleCopilotDeviceCode(w http.ResponseWriter, req *http.Reques
 	// Step 1: Request device code from GitHub
 	deviceResp, err := requestGitHubDeviceCode()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to request device code: %v", err), http.StatusInternalServerError)
+		log.Printf("[error] handleCopilotDeviceCode: %v", err)
+		http.Error(w, "Failed to request device code", http.StatusInternalServerError)
 		return
 	}
 
@@ -137,7 +138,8 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 	// Poll GitHub for access token
 	tokenResp, err := pollGitHubAccessToken(request.DeviceCode)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to poll for token: %v", err), http.StatusInternalServerError)
+		log.Printf("[error] handleCopilotToken poll: %v", err)
+		http.Error(w, "Failed to poll for token", http.StatusInternalServerError)
 		return
 	}
 
@@ -162,7 +164,8 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 	// Exchange the GitHub access token for a Copilot API key
 	copilotKeyResp, err := exchangeForCopilotAPIKey(tokenResp.AccessToken)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to exchange for Copilot API key: %v", err), http.StatusInternalServerError)
+		log.Printf("[error] handleCopilotToken exchange: %v", err)
+		http.Error(w, "Failed to exchange for Copilot API key", http.StatusInternalServerError)
 		return
 	}
 
@@ -181,7 +184,8 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 	// Check if config already exists
 	existingConfig, err := r.authConfigStore.GetByID(configID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to check existing config: %v", err), http.StatusInternalServerError)
+		log.Printf("[error] handleCopilotToken check existing %s: %v", configID, err)
+		http.Error(w, "Failed to check existing config", http.StatusInternalServerError)
 		return
 	}
 
@@ -213,7 +217,8 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 		existingConfig.EndpointURL = apiEndpoint
 		existingConfig.UpdatedAt = now
 		if err := r.authConfigStore.Update(existingConfig); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to update auth config: %v", err), http.StatusInternalServerError)
+			log.Printf("[error] handleCopilotToken update config %s: %v", configID, err)
+			http.Error(w, "Failed to update auth config", http.StatusInternalServerError)
 			return
 		}
 	} else {
@@ -229,7 +234,8 @@ func (r *Router) handleCopilotToken(w http.ResponseWriter, req *http.Request) {
 			UpdatedAt:   now,
 		}
 		if err := r.authConfigStore.Create(config); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to create auth config: %v", err), http.StatusInternalServerError)
+			log.Printf("[error] handleCopilotToken create config %s: %v", configID, err)
+			http.Error(w, "Failed to create auth config", http.StatusInternalServerError)
 			return
 		}
 	}
@@ -275,7 +281,8 @@ func (r *Router) handleCopilotModels(w http.ResponseWriter, req *http.Request) {
 	// Get the auth config to retrieve the access token
 	config, err := r.authConfigStore.GetByID(configID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get auth config: %v", err), http.StatusInternalServerError)
+		log.Printf("[error] handleCopilotModels get config %s: %v", configID, err)
+		http.Error(w, "Failed to get auth config", http.StatusInternalServerError)
 		return
 	}
 	if config == nil {
@@ -286,7 +293,8 @@ func (r *Router) handleCopilotModels(w http.ResponseWriter, req *http.Request) {
 	// Get a fresh Copilot API key (refreshes automatically if near expiry)
 	apiKey, err := r.ensureFreshCopilotToken(config)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get Copilot API key: %v", err), http.StatusInternalServerError)
+		log.Printf("[error] handleCopilotModels ensure token %s: %v", configID, err)
+		http.Error(w, "Failed to get Copilot API key", http.StatusInternalServerError)
 		return
 	}
 
@@ -311,14 +319,16 @@ func (r *Router) handleCopilotModels(w http.ResponseWriter, req *http.Request) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(modelsReq)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch models: %v", err), http.StatusBadGateway)
+		log.Printf("[error] handleCopilotModels fetch %s: %v", configID, err)
+		http.Error(w, "Failed to fetch models", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		http.Error(w, fmt.Sprintf("GitHub Copilot API returned status %d: %s", resp.StatusCode, string(body)), resp.StatusCode)
+		log.Printf("[error] handleCopilotModels API %s: status=%d body=%s", configID, resp.StatusCode, string(body))
+		http.Error(w, "GitHub Copilot API error", resp.StatusCode)
 		return
 	}
 

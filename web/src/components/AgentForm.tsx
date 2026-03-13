@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, CreateAgentRequest, Agent, Model, AuthConfig } from '../api/client'
 import Modal from './Modal'
 import Alert from './Alert'
+import SearchableSelect from './SearchableSelect'
 
 interface AgentFormProps {
   agent?: Agent
@@ -277,20 +278,14 @@ export default function AgentForm({ agent, onSuccess, onCancel }: AgentFormProps
 
         <div className="form-group">
           <label htmlFor="modelId">Model *</label>
-          <select
+          <SearchableSelect
             id="modelId"
-            required
             value={formData.modelId || ''}
-            onChange={e => setFormData(prev => ({ ...prev, modelId: e.target.value }))}
+            onChange={(value) => setFormData(prev => ({ ...prev, modelId: value }))}
             disabled={!formData.authConfigId}
-          >
-            <option value="">{formData.authConfigId ? '— Select model —' : '— Select a provider first —'}</option>
-            {filteredModels?.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.modelIdentifier})
-              </option>
-            ))}
-          </select>
+            placeholder={formData.authConfigId ? '— Select model —' : '— Select a provider first —'}
+            options={filteredModels?.map(m => ({ value: m.id, label: `${m.name} (${m.modelIdentifier})` })) || []}
+          />
           <small>
             {formData.authConfigId && filteredModels.length === 0
               ? 'No models found for this provider — try syncing on the Models page'

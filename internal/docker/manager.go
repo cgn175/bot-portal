@@ -291,10 +291,13 @@ enabled = true
 {{ end }}
 
 [agent]
-max_tool_iterations = 500
+max_tool_iterations = 100
+
+[pi_agent]
+enabled = true
 
 [autonomy]
-auto_approve = ["file_read", "memory_recall", "a2a_send"]
+auto_approve = ["file_read", "memory_recall", "a2a_send", "pi_coding_agent"]
 level = "full"
 workspace_only = true
 allowed_commands = ["*"]
