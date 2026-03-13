@@ -9,6 +9,7 @@
 /portal.db
 *.db-wal
 *.db-shm
+*.lock
 
 # OS
 .DS_Store

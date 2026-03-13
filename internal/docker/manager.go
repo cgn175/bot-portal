@@ -451,6 +451,8 @@ func (m *Manager) CreateContainer(ctx context.Context, config ContainerConfig) (
 	envVars := buildEnvironmentVars(config)
 	envVars = append(envVars, fmt.Sprintf("ZEROCLAW_GATEWAY_PORT=%s", gatewayPort))
 
+	envVars = append(envVars, "RUST_LOG=debug")
+
 	// Port bindings for host access
 	portBindings := nat.PortMap{}
 	if config.ListenPort > 0 {

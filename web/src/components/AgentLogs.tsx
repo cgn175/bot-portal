@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import AnsiToHtml from 'ansi-to-html'
 import { api } from '../api/client'
 
 interface AgentLogsProps {
@@ -11,6 +12,7 @@ export default function AgentLogs({ agentId }: AgentLogsProps) {
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
+  const ansi = useMemo(() => new AnsiToHtml({ fg: '#e0e0e0', bg: '#1a1a2e', escapeXML: true }), [])
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -96,13 +98,14 @@ export default function AgentLogs({ agentId }: AgentLogsProps) {
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-all',
             }}
-          >
-            {loading && logs === null
-              ? 'Loading logs...'
-              : logs
-                ? logs
-                : 'No logs available.'}
-          </div>
+            dangerouslySetInnerHTML={{
+              __html: loading && logs === null
+                ? 'Loading logs...'
+                : logs
+                  ? ansi.toHtml(logs)
+                  : 'No logs available.',
+            }}
+          />
         </div>
       )}
     </div>
