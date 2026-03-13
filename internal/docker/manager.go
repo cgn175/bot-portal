@@ -696,6 +696,11 @@ func (m *Manager) ContainerLogs(ctx context.Context, containerID string, tail st
 	return buf.String(), nil
 }
 
+// RawContainerLogs returns a raw log stream from a Docker container
+func (m *Manager) RawContainerLogs(ctx context.Context, containerID string, opts container.LogsOptions) (io.ReadCloser, error) {
+	return m.cli.ContainerLogs(ctx, containerID, opts)
+}
+
 // Close closes the Docker manager
 func (m *Manager) Close() error {
 	if m.cli != nil {

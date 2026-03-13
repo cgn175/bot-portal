@@ -124,6 +124,7 @@ func (r *Router) Run(addr string) error {
 			r.agentHandler.HandleAgentDetail(w, req)
 		}
 	})
+	mux.HandleFunc("/api/agents/container-logs-stream", r.agentHandler.StreamContainerLogs)
 	mux.HandleFunc("/api/agents-stream", r.agentHandler.StreamAgents)
 
 	// Channel management

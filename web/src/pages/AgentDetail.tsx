@@ -5,6 +5,7 @@ import { api, Model, AuthConfig } from '../api/client'
 import AgentForm from '../components/AgentForm'
 import AgentChat from '../components/AgentChat'
 import AgentLogs from '../components/AgentLogs'
+import LiveLogViewer from '../components/LiveLogViewer'
 import Alert from '../components/Alert'
 import StatusBadge from '../components/StatusBadge'
 import { LoadingState } from '../components/LoadingState'
@@ -19,6 +20,7 @@ export default function AgentDetail() {
   const [success, setSuccess] = useState('')
   const [pinging, setPinging] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
+  const [showLiveLogs, setShowLiveLogs] = useState(false)
   const [models, setModels] = useState<Model[]>([])
   const [authConfigs, setAuthConfigs] = useState<AuthConfig[]>([])
 
@@ -309,7 +311,42 @@ export default function AgentDetail() {
       )}
 
       {isDocker && (
-        <AgentLogs agentId={agent.id} />
+        <>
+          <div className="card" style={{ marginBottom: '1.5rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '1rem',
+              }}
+            >
+              <h3 style={{
+                fontSize: 'var(--font-size-xl)',
+                fontWeight: 'var(--font-weight-semibold)',
+                margin: 0,
+              }}>
+                Logs
+              </h3>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowLiveLogs(true)}
+                disabled={agent.status !== 'running'}
+                title={agent.status !== 'running' ? 'Agent must be running to view live logs' : 'Open live log stream'}
+              >
+                📺 View Live Logs
+              </button>
+            </div>
+            <AgentLogs agentId={agent.id} />
+          </div>
+        </>
+      )}
+
+      {showLiveLogs && (
+        <LiveLogViewer
+          agentId={agent.id}
+          onClose={() => setShowLiveLogs(false)}
+        />
       )}
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
