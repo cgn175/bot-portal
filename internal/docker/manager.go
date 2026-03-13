@@ -402,13 +402,6 @@ func generateAgentConfig(config ContainerConfig, gatewayPort string) (string, er
 		return "", fmt.Errorf("failed to set secure permissions on config file: %w", err)
 	}
 
-	// Try to chown to the agent user, but don't fail if we can't
-	// The chmod 0600 ensures at least the current user can read it
-	if err := os.Chown(configPath, 65534, 65534); err != nil {
-		// Log but don't fail - the file is still usable with 0600 permissions
-		// This is expected when running as non-root
-	}
-
 	return configPath, nil
 }
 
