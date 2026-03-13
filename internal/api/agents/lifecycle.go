@@ -479,17 +479,36 @@ func (h *Handler) handleAgentChat(w http.ResponseWriter, req *http.Request, agen
 }
 
 func (h *Handler) streamAgentLogs(w http.ResponseWriter, req *http.Request, agentID string) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	var flusher http.Flusher
-	if f, ok := w.(http.Flusher); ok {
-		flusher = f
+	agent, err := h.AgentStore.GetByID(agentID)
+	if err != nil {
+		http.Error(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+	if agent.AgentType != "docker" {
+		http.Error(w, "Logs only available for docker agents", http.StatusBadRequest)
+		return
 	}
 
-	fmt.Fprintf(w, "data: Log streaming not yet implemented\n\n")
-	if flusher != nil {
-		flusher.Flush()
+	tail := req.URL.Query().Get("tail")
+	if tail == "" {
+		tail = "100"
 	}
+
+	mgr, err := docker.NewManager()
+	if err != nil {
+		log.Printf("Failed to create docker manager for logs: %v", err)
+		http.Error(w, "Failed to connect to Docker", http.StatusInternalServerError)
+		return
+	}
+	defer mgr.Close()
+
+	logs, err := mgr.ContainerLogs(req.Context(), agent.ContainerID, tail)
+	if err != nil {
+		log.Printf("Failed to get logs for agent %s: %v", agentID, err)
+		http.Error(w, fmt.Sprintf("Failed to get logs: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"logs": logs})
 }

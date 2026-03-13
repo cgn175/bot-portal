@@ -450,6 +450,13 @@ class ApiClient {
   // Identity Files Management
   // ============================================================================
 
+  async getAgentLogs(agentId: string, tail: number = 100): Promise<string> {
+    const res = await fetch(`${API_BASE}/agents/${agentId}?action=logs&tail=${tail}`)
+    if (!res.ok) throw new Error('Failed to fetch agent logs')
+    const data = await res.json()
+    return data.logs
+  }
+
   async getAgentIdentityFiles(agentId: string): Promise<AgentIdentityFilesResponse> {
     const res = await fetch(`${API_BASE}/agents/${agentId}/identity-files`)
     if (!res.ok) throw new Error('Failed to fetch identity files')

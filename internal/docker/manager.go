@@ -1,9 +1,11 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/zeroclaw/bot-portal/internal/provider"
 )
@@ -655,6 +658,40 @@ func (m *Manager) GetContainerIP(ctx context.Context, containerID string) (strin
 func (m *Manager) RegenerateConfig(config ContainerConfig, gatewayPort string) error {
 	_, err := generateAgentConfig(config, gatewayPort)
 	return err
+}
+
+// ContainerLogs returns the last N lines of logs from a container.
+func (m *Manager) ContainerLogs(ctx context.Context, containerID string, tail string) (string, error) {
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       tail,
+		Timestamps: true,
+	}
+	reader, err := m.cli.ContainerLogs(ctx, containerID, opts)
+	if err != nil {
+		return "", fmt.Errorf("failed to get container logs: %w", err)
+	}
+	defer reader.Close()
+
+	var buf bytes.Buffer
+	// Docker multiplexes stdout/stderr with an 8-byte header per frame.
+	// stdcopy.StdCopy demuxes it into clean output.
+	if _, err := stdcopy.StdCopy(&buf, &buf, reader); err != nil {
+		// Fallback: some containers (TTY mode) send raw output without headers.
+		// Re-fetch and read directly.
+		reader2, err2 := m.cli.ContainerLogs(ctx, containerID, opts)
+		if err2 != nil {
+			return "", fmt.Errorf("failed to get container logs: %w", err2)
+		}
+		defer reader2.Close()
+		buf.Reset()
+		if _, err := io.Copy(&buf, reader2); err != nil {
+			return "", fmt.Errorf("failed to read container logs: %w", err)
+		}
+	}
+
+	return buf.String(), nil
 }
 
 // Close closes the Docker manager

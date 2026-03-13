@@ -166,7 +166,7 @@ function MessageCard({ message, index }: MessageCardProps) {
           <StatusBadge status={message.direction} />
         </div>
         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-          {new Date(message.created_at).toLocaleString()}
+          {new Date(message.createdAt).toLocaleString()}
         </div>
       </div>
 

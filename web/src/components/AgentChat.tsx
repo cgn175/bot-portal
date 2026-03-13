@@ -12,8 +12,8 @@ interface A2ATask {
   id: string
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   messages?: Message[]
-  created_at: string
-  updated_at?: string
+  createdAt: string
+  updatedAt?: string
 }
 
 interface A2ATaskResponse {
