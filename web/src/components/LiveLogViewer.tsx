@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import AnsiToHtml from 'ansi-to-html'
 
 interface LogEntry {
   timestamp: string
@@ -9,7 +10,6 @@ interface LogEntry {
 interface LiveLogViewerProps {
   agentId: string
   containerId?: string
-  onClose: () => void
 }
 
 type ConnectionStatus = 'connecting' | 'live' | 'paused' | 'reconnecting' | 'error' | 'closed'
@@ -68,7 +68,7 @@ class FetchEventSource {
 
       while (!this.isClosed) {
         const { done, value } = await reader.read()
-        
+
         if (done) {
           break
         }
@@ -99,7 +99,7 @@ class FetchEventSource {
   }
 }
 
-export default function LiveLogViewer({ agentId, containerId, onClose }: LiveLogViewerProps) {
+export default function LiveLogViewer({ agentId, containerId }: LiveLogViewerProps) {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [isPaused, setIsPaused] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -107,6 +107,8 @@ export default function LiveLogViewer({ agentId, containerId, onClose }: LiveLog
   const [reconnectAttempt, setReconnectAttempt] = useState(0)
   const [tail, setTail] = useState(100)
   const [error, setError] = useState<string | null>(null)
+
+  const ansi = useMemo(() => new AnsiToHtml({ fg: '#e6edf3', bg: '#0d1117', escapeXML: true }), [])
 
   const logsContainerRef = useRef<HTMLDivElement>(null)
   const fetchESRef = useRef<FetchEventSource | null>(null)
@@ -173,7 +175,7 @@ export default function LiveLogViewer({ agentId, containerId, onClose }: LiveLog
       onMessage: (data) => {
         try {
           const entry: LogEntry = JSON.parse(data)
-          
+
           if (isPaused) {
             pendingLogsRef.current.push(entry)
             // Prevent unbounded growth of pending logs
@@ -197,13 +199,13 @@ export default function LiveLogViewer({ agentId, containerId, onClose }: LiveLog
         console.error('SSE error:', err)
         setError(err.message)
         setConnectionStatus('error')
-        
+
         // Start reconnection logic
         if (reconnectAttempt < MAX_RECONNECT_ATTEMPTS) {
           const delay = RECONNECT_DELAYS[reconnectAttempt] || RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1]
           setConnectionStatus('reconnecting')
           setReconnectAttempt((prev) => prev + 1)
-          
+
           reconnectTimeoutRef.current = setTimeout(() => {
             connect()
           }, delay)
@@ -267,7 +269,7 @@ export default function LiveLogViewer({ agentId, containerId, onClose }: LiveLog
     const text = logs
       .map((log) => `[${formatTimestamp(log.timestamp)}] [${log.stream}] ${log.line}`)
       .join('\n')
-    
+
     try {
       await navigator.clipboard.writeText(text)
     } catch (err) {
@@ -316,364 +318,260 @@ export default function LiveLogViewer({ agentId, containerId, onClose }: LiveLog
 
   return (
     <div
-      className="modal-overlay"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="log-viewer-title"
       style={{
-        zIndex: 400,
+        display: 'flex',
+        flexDirection: 'column',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
       }}
     >
+      {/* Header */}
       <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
         style={{
-          maxWidth: '90vw',
-          width: '1000px',
-          maxHeight: '90vh',
+          padding: '0.75rem 1rem',
+          borderBottom: '1px solid var(--color-border)',
           display: 'flex',
-          flexDirection: 'column',
-          padding: 0,
-          overflow: 'hidden',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'var(--color-bg-secondary)',
         }}
       >
-        {/* Header */}
         <div
           style={{
-            padding: '1rem 1.5rem',
-            borderBottom: '1px solid var(--color-border)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            background: 'var(--color-bg-secondary)',
-          }}
-        >
-          <div>
-            <h3
-              id="log-viewer-title"
-              style={{
-                fontSize: 'var(--font-size-lg)',
-                fontWeight: 'var(--font-weight-semibold)',
-                margin: 0,
-              }}
-            >
-              Live Logs: {agentId}
-              {containerId && containerId !== agentId && (
-                <span style={{ color: 'var(--color-text-muted)', fontWeight: 'normal' }}>
-                  {' '}
-                  / {containerId}
-                </span>
-              )}
-            </h3>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginTop: '0.25rem',
-              }}
-            >
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor: getStatusColor(),
-                  boxShadow: connectionStatus === 'live' ? `0 0 8px ${getStatusColor()}` : 'none',
-                  transition: 'all 0.3s ease',
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-muted)',
-                }}
-              >
-                {getStatusText()}
-              </span>
-              {logs.length > 0 && (
-                <span
-                  style={{
-                    fontSize: 'var(--font-size-xs)',
-                    color: 'var(--color-text-subtle)',
-                    marginLeft: '0.5rem',
-                  }}
-                >
-                  ({logs.length.toLocaleString()} lines)
-                </span>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="btn btn-ghost"
-            style={{ padding: '0.5rem', fontSize: '1.25rem' }}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Warning Banner */}
-        <div
-          style={{
-            background: 'var(--color-warning-subtle)',
-            borderBottom: '1px solid rgba(245, 158, 11, 0.2)',
-            padding: '0.75rem 1.5rem',
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-warning)',
           }}
         >
-          <span>⚠️</span>
-          <span>
-            Warning: Logs may contain sensitive information such as API keys, tokens, or passwords.
-            Use caution when sharing.
-          </span>
-        </div>
-
-        {/* Controls Toolbar */}
-        <div
-          style={{
-            padding: '0.75rem 1.5rem',
-            borderBottom: '1px solid var(--color-border)',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-            alignItems: 'center',
-            background: 'var(--color-bg-tertiary)',
-          }}
-        >
-          <button
-            onClick={handlePauseToggle}
-            className={`btn ${isPaused ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: 'var(--font-size-sm)', padding: '0.5rem 0.75rem' }}
-          >
-            {isPaused ? '▶ Resume' : '⏸ Pause'}
-          </button>
-
-          <button
-            onClick={handleAutoScrollToggle}
-            className={`btn ${autoScroll ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ fontSize: 'var(--font-size-sm)', padding: '0.5rem 0.75rem' }}
-          >
-            {autoScroll ? '⬇ Auto-scroll ON' : '⬇ Auto-scroll OFF'}
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <label
-              htmlFor="tail-select"
-              style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-muted)',
-              }}
-            >
-              Tail:
-            </label>
-            <select
-              id="tail-select"
-              value={tail}
-              onChange={handleTailChange}
-              style={{
-                padding: '0.5rem',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-bg)',
-                color: 'var(--color-text)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              {TAIL_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option} lines
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ flex: 1 }} />
-
-          <button
-            onClick={handleCopyAll}
-            className="btn btn-secondary"
-            style={{ fontSize: 'var(--font-size-sm)', padding: '0.5rem 0.75rem' }}
-            disabled={logs.length === 0}
-          >
-            📋 Copy All
-          </button>
-        </div>
-
-        {/* Log Container */}
-        <div
-          ref={logsContainerRef}
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '1rem',
-            background: '#0d1117',
-            fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
-            fontSize: '12px',
-            lineHeight: '1.5',
-          }}
-        >
-          {logs.length === 0 && connectionStatus === 'connecting' && (
-            <div
-              style={{
-                textAlign: 'center',
-                color: 'var(--color-text-muted)',
-                padding: '3rem 0',
-              }}
-            >
-              <div className="loading-pulse" style={{ justifyContent: 'center' }}>
-                <span />
-                <span />
-                <span />
-              </div>
-              <p style={{ marginTop: '1rem' }}>Connecting to log stream...</p>
-            </div>
-          )}
-
-          {logs.length === 0 && connectionStatus === 'error' && (
-            <div
-              style={{
-                textAlign: 'center',
-                color: 'var(--color-error)',
-                padding: '3rem 0',
-              }}
-            >
-              <p>❌ Failed to connect to log stream</p>
-              {error && (
-                <p style={{ fontSize: 'var(--font-size-xs)', marginTop: '0.5rem', opacity: 0.8 }}>
-                  {error}
-                </p>
-              )}
-            </div>
-          )}
-
-          {logs.map((log, index) => (
-            <div
-              key={index}
-              style={{
-                display: 'flex',
-                gap: '0.75rem',
-                padding: '0.125rem 0',
-                color: log.stream === 'stderr' ? '#f85149' : '#e6edf3',
-              }}
-            >
-              <span
-                style={{
-                  color: 'var(--color-text-subtle)',
-                  userSelect: 'none',
-                  minWidth: '80px',
-                }}
-              >
-                {formatTimestamp(log.timestamp)}
-              </span>
-              <span
-                style={{
-                  color: log.stream === 'stderr' ? '#f85149' : '#3fb950',
-                  userSelect: 'none',
-                  minWidth: '50px',
-                  textTransform: 'uppercase',
-                  fontSize: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                {log.stream}
-              </span>
-              <span
-                style={{
-                  flex: 1,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                }}
-              >
-                {log.line.includes('REDACTED') ? (
-                  <>
-                    {log.line.split('REDACTED').map((part, i, arr) => (
-                      <span key={i}>
-                        {part}
-                        {i < arr.length - 1 && (
-                          <span
-                            style={{
-                              background: 'var(--color-warning)',
-                              color: '#000',
-                              padding: '0 0.25rem',
-                              borderRadius: 'var(--radius-sm)',
-                              fontWeight: 'bold',
-                              fontSize: '10px',
-                            }}
-                          >
-                            REDACTED
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                  </>
-                ) : (
-                  log.line
-                )}
-              </span>
-            </div>
-          ))}
-
-          {isPaused && pendingLogsRef.current.length > 0 && (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '0.5rem',
-                marginTop: '0.5rem',
-                background: 'var(--color-warning-subtle)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--color-warning)',
-                fontSize: 'var(--font-size-xs)',
-              }}
-            >
-              ⏸ {pendingLogsRef.current.length.toLocaleString()} new lines buffered (resume to view)
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div
-          style={{
-            padding: '0.75rem 1.5rem',
-            borderTop: '1px solid var(--color-border)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            background: 'var(--color-bg-secondary)',
-          }}
-        >
-          <div
+          <span
             style={{
-              fontSize: 'var(--font-size-xs)',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor: getStatusColor(),
+              boxShadow: connectionStatus === 'live' ? `0 0 8px ${getStatusColor()}` : 'none',
+              transition: 'all 0.3s ease',
+            }}
+          />
+          <span
+            style={{
+              fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-muted)',
             }}
           >
-            {connectionStatus === 'live' && isPaused === false && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    backgroundColor: '#10b981',
-                    animation: 'pulse 1.5s ease-in-out infinite',
-                  }}
-                />
-                Streaming live logs...
-              </span>
+            {getStatusText()}
+          </span>
+          {logs.length > 0 && (
+            <span
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-text-subtle)',
+                marginLeft: '0.5rem',
+              }}
+            >
+              ({logs.length.toLocaleString()} lines)
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Warning Banner */}
+      <div
+        style={{
+          background: 'var(--color-warning-subtle)',
+          borderBottom: '1px solid rgba(245, 158, 11, 0.2)',
+          padding: '0.75rem 1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--color-warning)',
+        }}
+      >
+        <span>⚠️</span>
+        <span>
+          Warning: Logs may contain sensitive information such as API keys, tokens, or passwords.
+          Use caution when sharing.
+        </span>
+      </div>
+
+      {/* Controls Toolbar */}
+      <div
+        style={{
+          padding: '0.75rem 1.5rem',
+          borderBottom: '1px solid var(--color-border)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
+          alignItems: 'center',
+          background: 'var(--color-bg-tertiary)',
+        }}
+      >
+        <button
+          onClick={handlePauseToggle}
+          className={`btn ${isPaused ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ fontSize: 'var(--font-size-sm)', padding: '0.5rem 0.75rem' }}
+        >
+          {isPaused ? '▶ Resume' : '⏸ Pause'}
+        </button>
+
+        <button
+          onClick={handleAutoScrollToggle}
+          className={`btn ${autoScroll ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ fontSize: 'var(--font-size-sm)', padding: '0.5rem 0.75rem' }}
+        >
+          {autoScroll ? '⬇ Auto-scroll ON' : '⬇ Auto-scroll OFF'}
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <label
+            htmlFor="tail-select"
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-muted)',
+            }}
+          >
+            Tail:
+          </label>
+          <select
+            id="tail-select"
+            value={tail}
+            onChange={handleTailChange}
+            style={{
+              padding: '0.5rem',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-bg)',
+              color: 'var(--color-text)',
+              fontSize: 'var(--font-size-sm)',
+            }}
+          >
+            {TAIL_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option} lines
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        <button
+          onClick={handleCopyAll}
+          className="btn btn-secondary"
+          style={{ fontSize: 'var(--font-size-sm)', padding: '0.5rem 0.75rem' }}
+          disabled={logs.length === 0}
+        >
+          📋 Copy All
+        </button>
+      </div>
+
+      {/* Log Container */}
+      <div
+        ref={logsContainerRef}
+        style={{
+          height: '500px',
+          overflowY: 'auto',
+          padding: '1rem',
+          background: '#0d1117',
+          fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+          fontSize: '12px',
+          lineHeight: '1.5',
+        }}
+      >
+        {logs.length === 0 && connectionStatus === 'connecting' && (
+          <div
+            style={{
+              textAlign: 'center',
+              color: 'var(--color-text-muted)',
+              padding: '3rem 0',
+            }}
+          >
+            <div className="loading-pulse" style={{ justifyContent: 'center' }}>
+              <span />
+              <span />
+              <span />
+            </div>
+            <p style={{ marginTop: '1rem' }}>Connecting to log stream...</p>
+          </div>
+        )}
+
+        {logs.length === 0 && connectionStatus === 'error' && (
+          <div
+            style={{
+              textAlign: 'center',
+              color: 'var(--color-error)',
+              padding: '3rem 0',
+            }}
+          >
+            <p>❌ Failed to connect to log stream</p>
+            {error && (
+              <p style={{ fontSize: 'var(--font-size-xs)', marginTop: '0.5rem', opacity: 0.8 }}>
+                {error}
+              </p>
             )}
           </div>
-          <button onClick={onClose} className="btn btn-secondary" style={{ fontSize: 'var(--font-size-sm)' }}>
-            Close
-          </button>
-        </div>
+        )}
+
+        {logs.map((log, index) => (
+          <div
+            key={index}
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              padding: '0.125rem 0',
+              color: log.stream === 'stderr' ? '#f85149' : '#e6edf3',
+            }}
+          >
+            <span
+              style={{
+                color: 'var(--color-text-subtle)',
+                userSelect: 'none',
+                minWidth: '60px',
+              }}
+            >
+              {formatTimestamp(log.timestamp)}
+            </span>
+            <span
+              style={{
+                color: log.stream === 'stderr' ? '#f85149' : '#3fb950',
+                userSelect: 'none',
+                minWidth: '30px',
+                textTransform: 'uppercase',
+                fontSize: '10px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {log.stream}
+            </span>
+            <span
+              style={{
+                flex: 1,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+              }}
+              dangerouslySetInnerHTML={{ __html: ansi.toHtml(log.line) }}
+            />
+          </div>
+        ))}
+
+        {isPaused && pendingLogsRef.current.length > 0 && (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '0.5rem',
+              marginTop: '0.5rem',
+              background: 'var(--color-warning-subtle)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--color-warning)',
+              fontSize: 'var(--font-size-xs)',
+            }}
+          >
+            ⏸ {pendingLogsRef.current.length.toLocaleString()} new lines buffered (resume to view)
+          </div>
+        )}
       </div>
 
       <style>{`

@@ -4,7 +4,6 @@ import { useAgents } from '../contexts/AgentContext'
 import { api, Model, AuthConfig } from '../api/client'
 import AgentForm from '../components/AgentForm'
 import AgentChat from '../components/AgentChat'
-import AgentLogs from '../components/AgentLogs'
 import LiveLogViewer from '../components/LiveLogViewer'
 import Alert from '../components/Alert'
 import StatusBadge from '../components/StatusBadge'
@@ -20,7 +19,6 @@ export default function AgentDetail() {
   const [success, setSuccess] = useState('')
   const [pinging, setPinging] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
-  const [showLiveLogs, setShowLiveLogs] = useState(false)
   const [models, setModels] = useState<Model[]>([])
   const [authConfigs, setAuthConfigs] = useState<AuthConfig[]>([])
 
@@ -192,11 +190,11 @@ export default function AgentDetail() {
             )}
 
             {isDocker && agent.status === 'running' && (
-                <>
-                  <button className="btn btn-secondary" onClick={() => handleAction('recreate')}>
-                    Recreate Container
-                  </button>
-                </>
+              <>
+                <button className="btn btn-secondary" onClick={() => handleAction('recreate')}>
+                  Recreate Container
+                </button>
+              </>
             )}
 
             <button className="btn btn-danger" onClick={handleDelete}>
@@ -219,9 +217,9 @@ export default function AgentDetail() {
             value={<code>{agent.endpoint || (isDocker ? `http://${agent.id}:8080` : 'N/A')}</code>}
           />
           <InfoRow label="Docker Image" value={<code>{agent.image || 'N/A'}</code>} />
-          
-          <InfoRow 
-            label="Auth Provider" 
+
+          <InfoRow
+            label="Auth Provider"
             value={
               selectedAuth ? (
                 <span>
@@ -233,11 +231,11 @@ export default function AgentDetail() {
               ) : (
                 <span style={{ color: 'var(--color-text-muted)' }}>{agent.authConfigId || 'None'}</span>
               )
-            } 
+            }
           />
 
-          <InfoRow 
-            label="Model" 
+          <InfoRow
+            label="Model"
             value={
               selectedModel ? (
                 <span>
@@ -249,7 +247,7 @@ export default function AgentDetail() {
               ) : (
                 <span style={{ color: 'var(--color-text-muted)' }}>{agent.modelId || 'None'}</span>
               )
-            } 
+            }
           />
 
           {agent.bearer_token && (
@@ -311,44 +309,17 @@ export default function AgentDetail() {
       )}
 
       {isDocker && (
-        <>
-          <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '1rem',
-              }}
-            >
-              <h3 style={{
-                fontSize: 'var(--font-size-xl)',
-                fontWeight: 'var(--font-weight-semibold)',
-                margin: 0,
-              }}>
-                Logs
-              </h3>
-              <button
-                className="btn btn-primary"
-                onClick={() => setShowLiveLogs(true)}
-                disabled={agent.status !== 'running'}
-                title={agent.status !== 'running' ? 'Agent must be running to view live logs' : 'Open live log stream'}
-              >
-                📺 View Live Logs
-              </button>
-            </div>
-            <AgentLogs agentId={agent.id} />
-          </div>
-        </>
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{
+            fontSize: 'var(--font-size-xl)',
+            fontWeight: 'var(--font-weight-semibold)',
+            marginBottom: '1rem',
+          }}>
+            Live Logs
+          </h3>
+          <LiveLogViewer agentId={agent.id} />
+        </div>
       )}
-
-      {showLiveLogs && (
-        <LiveLogViewer
-          agentId={agent.id}
-          onClose={() => setShowLiveLogs(false)}
-        />
-      )}
-
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-semibold)', marginBottom: '1rem' }}>
           Quick Actions
