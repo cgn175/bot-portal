@@ -97,6 +97,7 @@ func (r *Router) handleTaskStream(w http.ResponseWriter, req *http.Request) {
 	addr := req.RemoteAddr
 	r.addTaskStreamConn(taskID, addr, ch)
 	defer r.removeTaskStreamConn(taskID, addr)
+	log.Printf("[SSE] Client %s subscribed to task %s stream", addr, taskID)
 
 	notify := req.Context().Done()
 	ticker := time.NewTicker(30 * time.Second)
