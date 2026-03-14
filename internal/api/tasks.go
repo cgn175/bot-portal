@@ -99,6 +99,23 @@ func (r *Router) handleTaskStream(w http.ResponseWriter, req *http.Request) {
 	defer r.removeTaskStreamConn(taskID, addr)
 	log.Printf("[SSE] Client %s subscribed to task %s stream", addr, taskID)
 
+	// Send current task state immediately so late subscribers don't miss completed tasks.
+	if task, err := r.getTask(taskID); err == nil && task != nil {
+		current := &a2a.TaskUpdate{TaskID: taskID, Status: task.Status}
+		// Include last message if task is already done
+		if (task.Status == a2a.TaskStatusCompleted || task.Status == a2a.TaskStatusFailed) && len(task.Messages) > 0 {
+			last := task.Messages[len(task.Messages)-1]
+			current.Message = &last
+		}
+		data, _ := json.Marshal(current)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+		// If already terminal, no need to wait for more events
+		if task.Status == a2a.TaskStatusCompleted || task.Status == a2a.TaskStatusFailed {
+			return
+		}
+	}
+
 	notify := req.Context().Done()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -435,7 +452,9 @@ func (r *Router) handleA2ARelay(w http.ResponseWriter, req *http.Request) {
 
 	// 4. Return task_id immediately to the sender (same response format as direct A2A)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(a2a.CreateTaskResponse{TaskID: taskID})
+	resp := a2a.CreateTaskResponse{}
+	resp.Task.ID = taskID
+	json.NewEncoder(w).Encode(resp)
 }
 
 // relayToRecipient forwards a relayed task to the actual recipient agent,

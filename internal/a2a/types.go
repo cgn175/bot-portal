@@ -108,9 +108,12 @@ type CreateTaskRequest struct {
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
-// CreateTaskResponse represents the response from creating a task
+// CreateTaskResponse represents the response from creating a task.
+// Uses the nested {"task": {"id": "..."}} format matching the zeroclaw-a2a Rust crate.
 type CreateTaskResponse struct {
-	TaskID string `json:"task_id"`
+	Task struct {
+		ID string `json:"id"`
+	} `json:"task"`
 }
 
 // GetTaskResponse represents the response for getting task status

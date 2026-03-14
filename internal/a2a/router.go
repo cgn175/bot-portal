@@ -93,7 +93,9 @@ func (r *Router) HandleTaskCreate(w http.ResponseWriter, req *http.Request) {
 		go r.forwardTask(channelID, senderID, taskID, createReq)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(CreateTaskResponse{TaskID: taskID})
+		resp := CreateTaskResponse{}
+		resp.Task.ID = taskID
+		json.NewEncoder(w).Encode(resp)
 		return
 	}
 
