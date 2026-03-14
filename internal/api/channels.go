@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/zeroclaw/bot-portal/internal/store"
 )
 
 // ============================================================================
@@ -112,7 +110,7 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Subscribe to notifications for this channel
-	ch := make(chan struct{}, 1)
+	ch := make(chan string, 4)
 	addr := req.RemoteAddr
 	r.addMsgStreamConn(channelID, addr, ch)
 	defer r.removeMsgStreamConn(channelID, addr)
@@ -125,8 +123,16 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 		select {
 		case <-notify:
 			return
-		case <-ch:
-			r.sendChannelMessages(w, flusher, channelID)
+		case updatedChannelID := <-ch:
+			if channelID != "" {
+				// Per-channel subscriber: send full message list
+				r.sendChannelMessages(w, flusher, channelID)
+			} else {
+				// Global subscriber: send lightweight notification with channel_id
+				data, _ := json.Marshal(map[string]string{"channel_id": updatedChannelID})
+				fmt.Fprintf(w, "data: %s\n\n", data)
+				flusher.Flush()
+			}
 		case <-ticker.C:
 			fmt.Fprintf(w, ": keepalive\n\n")
 			flusher.Flush()
@@ -135,17 +141,10 @@ func (r *Router) handleMessageStream(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Router) sendChannelMessages(w http.ResponseWriter, flusher http.Flusher, channelID string) {
-	var messages []*store.TaskLog
-	var err error
-	if channelID != "" {
-		messages, err = r.messageStore.ListByChannel(channelID, 100)
-	} else {
-		messages, err = r.messageStore.ListAll(100)
-	}
+	messages, err := r.messageStore.ListByChannel(channelID, 100)
 	if err != nil {
 		return
 	}
-
 	data, err := json.Marshal(messages)
 	if err != nil {
 		return
@@ -154,11 +153,11 @@ func (r *Router) sendChannelMessages(w http.ResponseWriter, flusher http.Flusher
 	flusher.Flush()
 }
 
-func (r *Router) addMsgStreamConn(channelID, addr string, ch chan struct{}) {
+func (r *Router) addMsgStreamConn(channelID, addr string, ch chan string) {
 	r.msgStreamMu.Lock()
 	defer r.msgStreamMu.Unlock()
 	if r.msgStreamConns[channelID] == nil {
-		r.msgStreamConns[channelID] = make(map[string]chan struct{})
+		r.msgStreamConns[channelID] = make(map[string]chan string)
 	}
 	r.msgStreamConns[channelID][addr] = ch
 }
@@ -179,22 +178,22 @@ func (r *Router) notifyMsgStream(channelID string) {
 	r.msgStreamMu.RLock()
 	defer r.msgStreamMu.RUnlock()
 
-	// Notify clients subscribed to this specific channel
+	// Notify per-channel subscribers
 	if conns, ok := r.msgStreamConns[channelID]; ok {
 		for _, ch := range conns {
 			select {
-			case ch <- struct{}{}:
+			case ch <- channelID:
 			default:
 			}
 		}
 	}
 
-	// Also notify clients subscribed to all channels (empty channelID)
+	// Notify global subscribers (no channel_id filter) with the channelID that changed
 	if channelID != "" {
 		if conns, ok := r.msgStreamConns[""]; ok {
 			for _, ch := range conns {
 				select {
-				case ch <- struct{}{}:
+				case ch <- channelID:
 				default:
 				}
 			}

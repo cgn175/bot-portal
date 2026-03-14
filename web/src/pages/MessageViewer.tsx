@@ -14,6 +14,7 @@ export default function MessageViewer() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [mobilePanel, setMobilePanel] = useState<'channels' | 'chat' | 'details'>('channels')
+  const [unread, setUnread] = useState<Record<string, number>>({})
 
   // Load channels
   useEffect(() => {
@@ -26,6 +27,28 @@ export default function MessageViewer() {
       }
     }
     loadChannels()
+  }, [])
+
+  // Global SSE — subscribe to ALL channels for unread badges
+  const selectedChannelIdRef = useRef(selectedChannelId)
+  useEffect(() => { selectedChannelIdRef.current = selectedChannelId }, [selectedChannelId])
+
+  useEffect(() => {
+    const es = api.streamMessages()
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        const channelId: string = data?.channel_id
+        if (!channelId) return
+        // Refresh channel list so new channels appear
+        api.listChannels().then(d => setChannels(d || []))
+        // Increment unread if not the currently viewed channel
+        if (channelId !== selectedChannelIdRef.current) {
+          setUnread(prev => ({ ...prev, [channelId]: (prev[channelId] || 0) + 1 }))
+        }
+      } catch { /* ignore parse errors */ }
+    }
+    return () => es.close()
   }, [])
 
   // Load messages when channel selected + SSE
@@ -79,6 +102,7 @@ export default function MessageViewer() {
 
   const handleSelectChannel = useCallback((id: string) => {
     setSelectedChannelId(id)
+    setUnread(prev => { const n = { ...prev }; delete n[id]; return n })
     setMobilePanel('chat')
   }, [])
 
@@ -98,6 +122,7 @@ export default function MessageViewer() {
                 key={channel.id}
                 channel={channel}
                 isActive={channel.id === selectedChannelId}
+                unread={unread[channel.id] || 0}
                 onClick={handleSelectChannel}
               />
             ))
@@ -150,9 +175,10 @@ export default function MessageViewer() {
 // Channel List Item
 // ============================================================================
 
-function ChannelItem({ channel, isActive, onClick }: {
+function ChannelItem({ channel, isActive, unread, onClick }: {
   channel: Channel
   isActive: boolean
+  unread: number
   onClick: (id: string) => void
 }) {
   return (
@@ -173,6 +199,9 @@ function ChannelItem({ channel, isActive, onClick }: {
         <div className="msger-channel-time">
           {channel.created_at ? formatTime(channel.created_at) : ''}
         </div>
+        {unread > 0 && (
+          <div className="msger-unread-badge">{unread > 99 ? '99+' : unread}</div>
+        )}
       </div>
     </button>
   )
