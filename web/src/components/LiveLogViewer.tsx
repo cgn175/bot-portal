@@ -552,7 +552,7 @@ export default function LiveLogViewer({ agentId, containerId }: LiveLogViewerPro
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-all',
               }}
-              dangerouslySetInnerHTML={{ __html: ansi.toHtml(log.line) }}
+              dangerouslySetInnerHTML={{ __html: ansi.toHtml(log.line ?? '') }}
             />
           </div>
         ))}
