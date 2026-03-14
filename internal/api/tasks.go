@@ -360,14 +360,27 @@ func (r *Router) getAgentsForRouting() ([]a2a.AgentInfo, error) {
 //  4. Forwards the task to the real recipient agent
 //  5. Subscribes to the recipient's SSE stream and relays responses back
 func (r *Router) handleA2ARelay(w http.ResponseWriter, req *http.Request) {
+	// Parse /a2a/relay/{recipientID}/tasks[/{taskID}/stream]
+	path := strings.TrimPrefix(req.URL.Path, "/a2a/relay/")
+	parts := strings.SplitN(path, "/", 3) // [recipientID, "tasks", "{taskID}/stream"]
+
+	// SSE stream: GET /a2a/relay/{recipientID}/tasks/{taskID}/stream
+	// Rewrite the path and delegate to handleTaskStream which uses /api/tasks/{taskID}/stream format.
+	if req.Method == http.MethodGet && len(parts) == 3 && parts[1] == "tasks" {
+		taskAndSuffix := parts[2] // "{taskID}/stream"
+		if strings.HasSuffix(taskAndSuffix, "/stream") {
+			taskID := strings.TrimSuffix(taskAndSuffix, "/stream")
+			req.URL.Path = "/api/tasks/" + taskID + "/stream"
+			r.handleTaskStream(w, req)
+			return
+		}
+	}
+
 	if req.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Parse /a2a/relay/{recipientID}/tasks
-	path := strings.TrimPrefix(req.URL.Path, "/a2a/relay/")
-	parts := strings.SplitN(path, "/", 2)
 	if len(parts) < 2 || parts[0] == "" || parts[1] != "tasks" {
 		http.Error(w, "Invalid relay path. Expected /a2a/relay/{recipientID}/tasks", http.StatusBadRequest)
 		return
@@ -558,7 +571,11 @@ func (r *Router) subscribeToRelayedAgentSSE(agent *store.Agent, agentTaskID, por
 				}
 				if update.Message != nil && update.Message.Content != "" {
 					lastMessage = update.Message
-					r.appendMessage(portalTaskID, *update.Message)
+					// Only append to this task if there's no sender to forward to.
+					// When forwarding, forwardResponseToSender creates a dedicated B→A task entry.
+					if sender == nil {
+						r.appendMessage(portalTaskID, *update.Message)
+					}
 				}
 				// Broadcast to frontend using portal's task ID
 				update.TaskID = portalTaskID
@@ -592,7 +609,11 @@ func (r *Router) forwardResponseToSender(sender *store.Agent, recipientID string
 	}
 
 	url := fmt.Sprintf("%s/tasks", sender.Endpoint)
-	createReq := a2a.CreateTaskRequest{Message: message}
+	// Deliver as a "user" role message so the receiving agent treats it
+	// as an incoming request rather than its own prior output.
+	incomingMsg := message
+	incomingMsg.Role = "user"
+	createReq := a2a.CreateTaskRequest{Message: incomingMsg}
 	body, _ := json.Marshal(createReq)
 
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
