@@ -532,6 +532,7 @@ func (r *Router) subscribeToRelayedAgentSSE(agent *store.Agent, agentTaskID, por
 	}
 
 	reader := bufio.NewReader(resp.Body)
+	var lastMessage *a2a.TaskMessage // track the last message to forward once on completion
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -552,23 +553,22 @@ func (r *Router) subscribeToRelayedAgentSSE(agent *store.Agent, agentTaskID, por
 
 			var update a2a.TaskUpdate
 			if err := json.Unmarshal([]byte(data), &update); err == nil {
-				// Update status on the portal task
 				if update.Status != "" {
 					r.updateTaskStatus(portalTaskID, string(update.Status))
 				}
-				// Forward the response back to the sender agent.
-				// forwardResponseToSender creates a new task_log entry for the
-				// response so it appears as a visible message in the frontend.
 				if update.Message != nil && update.Message.Content != "" {
-					if sender != nil && sender.Endpoint != "" {
-						r.forwardResponseToSender(sender, agent.ID, *update.Message)
-					}
+					lastMessage = update.Message
+					r.appendMessage(portalTaskID, *update.Message)
 				}
 				// Broadcast to frontend using portal's task ID
 				update.TaskID = portalTaskID
 				r.broadcastTaskUpdate(portalTaskID, &update)
 				if update.Status == a2a.TaskStatusCompleted || update.Status == a2a.TaskStatusFailed {
 					log.Printf("[A2A Relay] Task finished: portalTask=%s status=%s", portalTaskID, update.Status)
+					// Forward the final response back to sender only once, on completion.
+					if update.Status == a2a.TaskStatusCompleted && sender != nil && sender.Endpoint != "" && lastMessage != nil {
+						r.forwardResponseToSender(sender, agent.ID, *lastMessage)
+					}
 					return
 				}
 			}
@@ -577,8 +577,9 @@ func (r *Router) subscribeToRelayedAgentSSE(agent *store.Agent, agentTaskID, por
 }
 
 // forwardResponseToSender sends a recipient's response back to the sender agent
-// by POSTing a new task to the sender's /tasks endpoint, then subscribes to
-// the sender's SSE stream so any follow-up reply is captured and relayed back.
+// by POSTing a new task to the sender's /tasks endpoint.
+// The relay's job ends here — if the sender wants to continue the conversation,
+// it will initiate a new relay request.
 func (r *Router) forwardResponseToSender(sender *store.Agent, recipientID string, message a2a.TaskMessage) {
 	channelID := a2a.ChannelID(recipientID, sender.ID)
 
@@ -590,7 +591,6 @@ func (r *Router) forwardResponseToSender(sender *store.Agent, recipientID string
 		return
 	}
 
-	// Forward to the sender agent
 	url := fmt.Sprintf("%s/tasks", sender.Endpoint)
 	createReq := a2a.CreateTaskRequest{Message: message}
 	body, _ := json.Marshal(createReq)
@@ -619,35 +619,6 @@ func (r *Router) forwardResponseToSender(sender *store.Agent, recipientID string
 		return
 	}
 
-	// Parse the sender's task ID from the response
-	var agentResp struct {
-		Task struct {
-			ID string `json:"id"`
-		} `json:"task"`
-		TaskID string `json:"task_id"`
-	}
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("[A2A Relay] Failed to read response from sender %s: %v", sender.ID, err)
-		return
-	}
-	if err := json.Unmarshal(respBody, &agentResp); err != nil {
-		log.Printf("[A2A Relay] Failed to parse response from sender %s: %s", sender.ID, string(respBody))
-		return
-	}
-	agentTaskID := agentResp.Task.ID
-	if agentTaskID == "" {
-		agentTaskID = agentResp.TaskID
-	}
-	if agentTaskID == "" {
-		log.Printf("[A2A Relay] No task ID in response from sender %s: %s", sender.ID, string(respBody))
-		return
-	}
-
-	log.Printf("[A2A Relay] Response forwarded to sender %s from %s (portalTask=%s agentTask=%s)", sender.ID, recipientID, portalTaskID, agentTaskID)
-
-	// Subscribe to the sender's SSE stream to capture any follow-up reply.
-	// The recipient becomes the "forward-to" agent for the next leg.
-	recipient, _ := r.agentStore.GetByID(recipientID)
-	r.subscribeToRelayedAgentSSE(sender, agentTaskID, portalTaskID, recipient)
+	log.Printf("[A2A Relay] Response delivered to sender %s from %s (portalTask=%s)", sender.ID, recipientID, portalTaskID)
+	r.updateTaskStatus(portalTaskID, string(a2a.TaskStatusCompleted))
 }
